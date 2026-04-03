@@ -424,3 +424,8 @@ gmon.out
 # example Wavefront .obj files
 !**/example/obj/
 !**/example/obj/*.obj
+
+.claude
+.venv
+build
+

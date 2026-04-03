@@ -29,8 +29,12 @@
 # if BOOST_VERSION <= 107400
 #	include <ThirdParty/boost/geometry/extensions/algorithms/dissolve.hpp>
 #	include <ThirdParty/boost/geometry/extensions/multi/algorithms/dissolve.hpp>
-# else
+# elif BOOST_VERSION <= 108600
 #	include <ThirdParty/boost/geometry/extensions2/algorithms/dissolve.hpp>
+# elif BOOST_VERSION <= 108800
+#	error "Boost 1.87 and 1.88 are not supported due to Boost.Geometry API changes. Please use Boost 1.86 or earlier, or Boost 1.89 or later."
+# else
+#	include <ThirdParty/boost/geometry/extensions3/algorithms/dissolve.hpp>
 # endif
 
 namespace s3d

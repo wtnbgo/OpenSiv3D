@@ -1,0 +1,51 @@
+{
+  "name": "opensiv3d",
+  "version-string": "0.6.16",  
+  "dependencies": [
+    "boost-algorithm",
+    "boost-asio",
+    "boost-container",
+    "boost-date-time",
+    "boost-exception",
+    "boost-filesystem",
+    "boost-geometry",
+    "boost-interprocess",
+    "boost-iostreams",
+    "boost-json",
+    "boost-phoenix",
+    "boost-predef",
+    "boost-range",
+    "boost-smart-ptr",
+    "boost-system",
+    "boost-uuid",
+    "curl",
+    "freetype",
+    "giflib",
+    "glib",
+    "harfbuzz",
+    "libjpeg-turbo",
+    "libpng",
+    "libwebp",
+    {
+      "name": "opencv4",
+      "features": [
+        "jpeg",
+        "png",
+        "webp",
+        "tiff",
+        "quirc",
+        "thread"
+      ]
+    },
+    "opengl",
+    "opus",
+    "opusfile",
+    "tiff",
+    "stduuid",
+    "libvorbis",
+    "zlib",
+    "zstd",
+    "minizip"
+  ],
+  "builtin-baseline": "bc38a15b0bee8bc48a49ea267cc32fbb49aedfc4"
+}

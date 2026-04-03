@@ -126,7 +126,7 @@ namespace s3d
 		::glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, wraps[static_cast<int32>(state.addressU)]);
 		::glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, wraps[static_cast<int32>(state.addressV)]);
 		::glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, wraps[static_cast<int32>(state.addressW)]);
-		::glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, state.lodBias);
+		// GL_TEXTURE_LOD_BIAS is not available in GLES
 		::glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_NONE);
 		::glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT, state.maxAnisotropy);
 		::glSamplerParameterfv(sampler, GL_TEXTURE_BORDER_COLOR, border);

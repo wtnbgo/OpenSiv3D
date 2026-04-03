@@ -1,0 +1,10 @@
+# easyexif library
+add_library(Siv3D_ThirdParty_easyexif OBJECT
+  exif.cpp
+)
+target_include_directories(Siv3D_ThirdParty_easyexif PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_features(Siv3D_ThirdParty_easyexif PRIVATE cxx_std_20)
+set_target_properties(Siv3D_ThirdParty_easyexif PROPERTIES
+  CXX_EXTENSIONS OFF
+  DEBUG_POSTFIX "d"
+)

@@ -24,7 +24,7 @@
 # include <Siv3D/AssetMonitor/IAssetMonitor.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 
-# if SIV3D_PLATFORM(WINDOWS)
+# if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3)
 #	include <Siv3D/Texture/D3D11/CTexture_D3D11.hpp>
 # endif
 
@@ -635,7 +635,7 @@ namespace s3d
 		m_handle.swap(other.m_handle);
 	}
 
-# if SIV3D_PLATFORM(WINDOWS)
+# if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3)
 
 	ID3D11Texture2D* Texture::getD3D11Texture2D()
 	{

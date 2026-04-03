@@ -19,7 +19,7 @@
 # include "PredefinedNamedParameter.hpp"
 # include "PredefinedYesNo.hpp"
 
-# if SIV3D_PLATFORM(WINDOWS)
+# if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3)
 
 	struct ID3D11Texture2D;
 
@@ -295,7 +295,7 @@ namespace s3d
 
 		void swap(Texture& other) noexcept;
 
-	# if SIV3D_PLATFORM(WINDOWS)
+	# if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3)
 
 		[[nodiscard]]
 		ID3D11Texture2D* getD3D11Texture2D();

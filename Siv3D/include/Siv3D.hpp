@@ -1896,9 +1896,9 @@
 //
 //////////////////////////////////////////////////
 
-# if !defined(SIV3D_LIBRARY_BUILD) && SIV3D_PLATFORM(WINDOWS)
+# if !defined(SIV3D_LIBRARY_BUILD) && SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3)
 
-	// Windows + MSVC 用の静的リンクライブラリ | Static link libraries for Windows + MSVC 
+	// Windows + MSVC 用の静的リンクライブラリ | Static link libraries for Windows + MSVC
 	# include <Siv3D/Windows/Libraries.hpp>
 
 # endif

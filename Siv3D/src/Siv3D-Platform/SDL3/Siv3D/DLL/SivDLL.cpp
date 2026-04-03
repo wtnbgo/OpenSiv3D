@@ -1,0 +1,111 @@
+//-----------------------------------------------
+//
+//	This file is part of the Siv3D Engine.
+//
+//	Copyright (c) 2008-2025 Ryo Suzuki
+//	Copyright (c) 2016-2025 OpenSiv3D Project
+//
+//	Licensed under the MIT License.
+//
+//-----------------------------------------------
+
+# include <Siv3D/DLL.hpp>
+# include <Siv3D/Error.hpp>
+# include <Siv3D/Unicode.hpp>
+# include <Siv3D/EngineLog.hpp>
+# include <Siv3D/Format.hpp>
+
+namespace s3d
+{
+	namespace DLL
+	{
+# if SIV3D_PLATFORM(WINDOWS)
+
+		LibraryHandle LoadSystemLibraryNoThrow(const wchar_t* library)
+		{
+			LOG_TRACE(U"DLL::LoadSystemLibraryNoThrow(\"{}\")"_fmt(Unicode::FromWstring(library)));
+			return ::LoadLibraryExW(library, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+		}
+
+		LibraryHandle LoadSystemLibrary(const wchar_t* library)
+		{
+			LOG_TRACE(U"DLL::LoadSystemLibrary(\"{}\")"_fmt(Unicode::FromWstring(library)));
+			const LibraryHandle hModule = ::LoadLibraryExW(library, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+			if (not hModule)
+			{
+				throw EngineError{ U"Failed to load `{}`"_fmt(Unicode::FromWstring(library)) };
+			}
+			return hModule;
+		}
+
+		LibraryHandle Load(const StringView path)
+		{
+			LOG_TRACE(U"DLL::Load(path = `{}`)"_fmt(path));
+			return ::LoadLibraryW(path.toWstr().c_str());
+		}
+
+		void Unload(LibraryHandle& library)
+		{
+			LOG_TRACE(U"DLL::Unload()");
+			if (library)
+			{
+				::FreeLibrary(library);
+			}
+			library = nullptr;
+		}
+
+		GetFunctionNoThrow::GetFunctionNoThrow(LibraryHandle _module, const char* name)
+			: p{ static_cast<const void*>(::GetProcAddress(_module, name)) }
+		{
+			LOG_TRACE(U"DLL::GetFunctionNoThrow::GetFunctionNoThrow(name = `{}`) p = {}"_fmt(Unicode::Widen(name), p));
+		}
+
+		GetFunction::GetFunction(LibraryHandle _module, const char* name)
+			: p{ static_cast<const void*>(::GetProcAddress(_module, name)) }
+		{
+			LOG_TRACE(U"DLL::GetFunction::GetFunction(name = `{}`) p = {}"_fmt(Unicode::Widen(name), p));
+
+			if (not p)
+			{
+				throw EngineError{ U"Failed to get function: `{}`"_fmt(Unicode::Widen(name)) };
+			}
+		}
+
+# else
+
+		LibraryHandle Load(const StringView path)
+		{
+			LOG_TRACE(U"DLL::Load(path = `{}`)"_fmt(path));
+			return ::dlopen(path.narrow().c_str(), RTLD_LOCAL | RTLD_LAZY);
+		}
+
+		void Unload(LibraryHandle& library)
+		{
+			LOG_TRACE(U"DLL::Unload()");
+			if (library)
+			{
+				::dlclose(library);
+			}
+			library = nullptr;
+		}
+
+		GetFunctionNoThrow::GetFunctionNoThrow(LibraryHandle module, const char* name)
+			: p{ reinterpret_cast<void*>(::dlsym(module, name)) }
+		{
+			LOG_TRACE(U"DLL::GetFunctionNoThrow::GetFunctionNoThrow(name = `{}`) p = {}"_fmt(Unicode::Widen(name), p));
+		}
+
+		GetFunction::GetFunction(LibraryHandle module, const char* name)
+			: p{ reinterpret_cast<void*>(::dlsym(module, name)) }
+		{
+			LOG_TRACE(U"DLL::GetFunction::GetFunction(name = `{}`) p = {}"_fmt(Unicode::Widen(name), p));
+
+			if (not p)
+			{
+				throw EngineError{ U"Failed to get function: `{}`"_fmt(Unicode::Widen(name)) };
+			}
+		}
+
+# endif
+	}
+}

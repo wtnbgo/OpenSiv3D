@@ -1374,7 +1374,7 @@
 // Usually where the variables are only used in debug mode.
 #define UNUSED_VAR(x) (void)(x)
 
-#include <ThirdParty/angelscript/angelscript.h>
+#include <angelscript/angelscript.h>
 #include "as_memory.h"
 
 #ifdef AS_USE_NAMESPACE

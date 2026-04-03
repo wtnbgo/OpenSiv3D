@@ -43,10 +43,11 @@ namespace s3d
 			0,
 			GL_CONSTANT_COLOR,
 			GL_ONE_MINUS_CONSTANT_COLOR,
-			GL_SRC1_COLOR,
-			GL_ONE_MINUS_SRC1_COLOR,
-			GL_SRC1_ALPHA,
-			GL_ONE_MINUS_SRC1_ALPHA,
+			// GL_SRC1_COLOR etc. are not available in GLES; use fallback
+			GL_ONE,    // SRC1_COLOR placeholder
+			GL_ZERO,   // ONE_MINUS_SRC1_COLOR placeholder
+			GL_ONE,    // SRC1_ALPHA placeholder
+			GL_ZERO,   // ONE_MINUS_SRC1_ALPHA placeholder
 		};
 	}
 
