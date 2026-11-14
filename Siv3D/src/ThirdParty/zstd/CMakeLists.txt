@@ -37,3 +37,5 @@ set_target_properties(Siv3D_ThirdParty_zstd PROPERTIES
   C_EXTENSIONS OFF
   DEBUG_POSTFIX "d"
 )
+# huf_decompress_amd64.S を組み込んでいないため、アセンブリ実装を無効化する
+target_compile_definitions(Siv3D_ThirdParty_zstd PRIVATE ZSTD_DISABLE_ASM)

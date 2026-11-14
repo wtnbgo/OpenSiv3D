@@ -1,5 +1,7 @@
 # angelscript library
-enable_language(ASM_MASM)
+if(MSVC)
+  enable_language(ASM_MASM)
+endif()
 add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_atomic.cpp
   as_builder.cpp
@@ -14,7 +16,6 @@ add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_callfunc_x64_gcc.cpp
   as_callfunc_x64_mingw.cpp
   as_callfunc_x64_msvc.cpp
-  as_callfunc_x64_msvc_asm.asm
   as_callfunc_x86.cpp
   as_callfunc_xenon.cpp
   as_compiler.cpp
@@ -42,6 +43,9 @@ add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_typeinfo.cpp
   as_variablescope.cpp
 )
+if(MSVC)
+  target_sources(Siv3D_ThirdParty_angelscript PRIVATE as_callfunc_x64_msvc_asm.asm)
+endif()
 target_include_directories(Siv3D_ThirdParty_angelscript PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/ThirdParty
