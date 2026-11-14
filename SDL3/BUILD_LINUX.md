@@ -105,10 +105,9 @@ objdump -T libSDL3.so.0 | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1
 | RPATH | `$ORIGIN` (DT_RPATH) | - |
 | `_Unwind_RaiseException` の定義 | 0 | - |
 
-NEEDED (GTK3 / GIO 依存を外す前の実測): `libgcc_s.so.1 libpthread.so.0 libdl.so.2 libSDL3.so.0
-libgtk-3.so.0 libgdk-3.so.0 libm.so.6 libgio-2.0.so.0 libgobject-2.0.so.0 libglib-2.0.so.0 libc.so.6
-ld-linux-x86-64.so.2` (`libSDL3.so.0` 以外は Steam Linux Runtime sniper / SteamOS に含まれる)。
-現在はファイルダイアログとゴミ箱を置き換えたので、gtk / gdk / gio / gobject / glib は NEEDED から外れる。
+NEEDED: `libgcc_s.so.1 libpthread.so.0 libdl.so.2 libSDL3.so.0 libm.so.6 libc.so.6
+ld-linux-x86-64.so.2` (`libSDL3.so.0` 以外は glibc / libgcc のみ。ファイルダイアログとゴミ箱を
+置き換えた後の実測で、gtk / gdk / gio / gobject / glib は含まない)。
 
 ## Linux 固有の構成 (CMakeLists.txt)
 
@@ -143,8 +142,11 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
   (`X11_GL_SwapWindow` → Mesa DRI3) が返らない。Wayland では SDL3 がフレーム待ちに
   タイムアウトを持つので進む。画面を復帰させてから実行する
   (吉里吉里Z でも、画面スリープ中の Wayland 起動で SDL3 初期化が落ちる事例がある)
-- ビルドツリーの実行ファイル (`SDL3/App/Release/Siv3DApp`) は `resources/` が隣に無いので、
-  起動確認は install 先で行う
+- ビルド後に `resources/` と `example/` が実行ファイルの隣 (`SDL3/App/Release/`) にも
+  コピーされるので、ビルドツリーでも起動できる (`SDL3/App/Release` に移動してから起動)
+- ゴミ箱: ホームと別のファイルシステムでは `<マウントポイント>/.Trash-<uid>` に入れる。
+  tmpfs の `/tmp` などシステム内部のマウントでも移動はするが、GNOME のゴミ箱 (GVfs) には
+  表示されない (GIO の `g_file_trash` はこの場合ゴミ箱への移動自体を失敗として返す)
 - sniper SDK イメージはローリング更新される。再現性を厳密にしたい場合は
   steamdev の Dockerfile の `FROM` をダイジェスト固定にする
 
@@ -152,5 +154,13 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
 
 2026-11-15、Ubuntu 26.04 (GNOME / Wayland, Mesa Intel Xe, OpenGL ES 3.2) のホストで
 install 先の `Siv3DApp` を起動し、`SDL3/App/Main.cpp` のデモ (テクスチャ・絵文字・
-MSDF フォント・GUI) が描画されることを確認した (Wayland)。X11 (XWayland) は
-画面スリープ中だったため上記の注意点により未確認。
+MSDF フォント・GUI) が Wayland / X11 (XWayland, `SDL_VIDEO_DRIVER=x11`) とも描画されることを確認した。
+
+ファイルダイアログ (`Dialog::OpenFile` / `OpenFiles` / `SaveFile` / `SelectFolder`) は、
+xdg-desktop-portal の FileChooser を模したテスト用サービスと偽の zenity で、タイトル・フィルタ・
+複数選択・フォルダ選択・初期フォルダ / 保存ファイル名・戻り値 (空白や日本語を含むパス) が
+正しく受け渡されることを確認した。キャンセル時と、portal も zenity も無い環境では
+`none` (空配列) が返り、落ちない。
+ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) はホームのゴミ箱
+(`~/.local/share/Trash/files` と `info/*.trashinfo`) に入り、`gio trash --list` に表示され、
+`gio trash --restore` (GNOME の「ゴミ箱」と同じ GVfs) で元に戻せることを確認した。
