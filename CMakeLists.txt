@@ -1107,5 +1107,7 @@ if(SIV3D_BUILD_SAMPLE)
       $<TARGET_FILE:SDL3::SDL3-shared>
       $<TARGET_SONAME_FILE:SDL3::SDL3-shared>
       DESTINATION .)
+    # エンジン資材 (Resource() = exe のフォルダ/resources/) とサンプル資材 (カレント相対 example/)
+    install(DIRECTORY Web/App/resources Web/App/example DESTINATION .)
   endif()
 endif()
