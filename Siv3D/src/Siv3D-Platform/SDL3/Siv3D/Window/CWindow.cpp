@@ -18,6 +18,7 @@
 # include <Siv3D/Monitor.hpp>
 # include <Siv3D/MonitorInfo.hpp>
 # include <Siv3D/Unicode.hpp>
+# include <Siv3D/FileSystem.hpp>
 # include <Siv3D/Renderer/IRenderer.hpp>
 # include <Siv3D/Profiler/IProfiler.hpp>
 # include <Siv3D/UserAction/IUserAction.hpp>
@@ -45,8 +46,33 @@ namespace s3d
 	void CWindow::init()
 	{
 		LOG_SCOPED_TRACE(U"CWindow::init()");
-		
-		if (SDL_Init(SDL_INIT_VIDEO) < 0)
+
+	# if SIV3D_PLATFORM(MACOS) && defined(SIV3D_ANGLE_GLES_LIB) && defined(SIV3D_ANGLE_EGL_LIB)
+		// macOS には OpenGL ES が無いので、.app の Contents/Frameworks に同梱した
+		// ANGLE (Metal バックエンド) を使う。SDL は既定でライブラリ名だけで dlopen するため、
+		// バンドル内の絶対パスをヒントで渡す (ウィンドウ / コンテキスト生成前に必要)。
+		// (SDL_GetBasePath() は .app/Contents/Resources/ を返すが、Resources が無いと "../Frameworks" を解決できないため
+		//  実行ファイルのディレクトリ (.app/Contents/MacOS/) を基準にする)
+		{
+			const std::string base = FileSystem::ParentPath(FileSystem::ModulePath()).toUTF8();
+
+			for (const std::string dir : { (base + "../Frameworks/"), base })
+			{
+				const std::string gles = (dir + SIV3D_ANGLE_GLES_LIB);
+				const std::string egl = (dir + SIV3D_ANGLE_EGL_LIB);
+
+				if (SDL_GetPathInfo(gles.c_str(), nullptr) && SDL_GetPathInfo(egl.c_str(), nullptr))
+				{
+					SDL_SetHint(SDL_HINT_OPENGL_LIBRARY, gles.c_str());
+					SDL_SetHint(SDL_HINT_EGL_LIBRARY, egl.c_str());
+					LOG_INFO(U"ANGLE: {} / {}"_fmt(Unicode::Widen(gles), Unicode::Widen(egl)));
+					break;
+				}
+			}
+		}
+	# endif
+
+		if (not SDL_Init(SDL_INIT_VIDEO))
 		{
 			throw EngineError(U"SDL_Init() failed: {}"_fmt(Unicode::Widen(SDL_GetError())));
 		}
@@ -61,9 +87,14 @@ namespace s3d
 		}
 		
 		// Create Window
+		SDL_WindowFlags windowFlags = (SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+	# if SIV3D_PLATFORM(MACOS)
+		// Retina: フレームバッファを物理ピクセル解像度にする (virtualSize はポイント単位のまま)
+		windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+	# endif
 		m_window = SDL_CreateWindow(m_actualTitle.narrow().c_str(),
 									m_state.virtualSize.x, m_state.virtualSize.y,
-									SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+									windowFlags);
 		
 		if (!m_window)
 		{
@@ -318,8 +349,13 @@ namespace s3d
 		m_state.frameBufferSize.set(fw, fh);
 
 		// scaling
+	# if SIV3D_PLATFORM(MACOS)
+		// macOS の Retina はコンテンツスケールではなくピクセル密度で表現されるため、両者を含むウィンドウのスケールを使う
+		float scale = SDL_GetWindowDisplayScale(m_window);
+	# else
 		SDL_DisplayID displayID = SDL_GetDisplayForWindow(m_window);
 		float scale = SDL_GetDisplayContentScale(displayID);
+	# endif
 		if (scale == 0.0f) scale = 1.0f;
 		m_state.scaling = scale;
 		

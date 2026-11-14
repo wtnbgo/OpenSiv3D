@@ -16,6 +16,12 @@ namespace s3d
 {
 	void CheckOpenGLError()
 	{
+		// GL コンテキスト生成 (glad のロード) 前に初期化が失敗した場合、終了処理から呼ばれても関数ポインタが null
+		if (glGetError == nullptr)
+		{
+			return;
+		}
+
 		size_t limitter = 0;
 
 		GLenum err;

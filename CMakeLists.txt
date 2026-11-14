@@ -14,6 +14,11 @@ project(OpenSiv3D
     DESCRIPTION "A C++20 framework for creative coding (2D/3D games, media art, visualizers, and simulators)."
 )
 
+# macOS: nativefiledialog-extended (nfd_cocoa.m) のために Objective-C を有効化
+if(APPLE)
+  enable_language(OBJC)
+endif()
+
 # Find required packages
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
@@ -123,6 +128,12 @@ set(SIV3D_SDL3_AUDIO_DECODERS
   Siv3D/src/Siv3D-Platform/WindowsDesktop/Siv3D/AudioFormat/WMA/WMADecoder.cpp
   Siv3D/src/Siv3D-Platform/WindowsDesktop/Siv3D/AudioFormat/FLAC/FLACDecoder.cpp
 )
+if(APPLE)
+  # CAudioDecoder は macOS で AIFFDecoder を登録する
+  list(APPEND SIV3D_SDL3_AUDIO_DECODERS
+    Siv3D/src/Siv3D-Platform/WindowsDesktop/Siv3D/AudioFormat/AIFF/AIFFDecoder.cpp
+  )
+endif()
 
 set(SIV3D_SDL3_SOURCES
   ${SIV3D_SDL3_AUDIO_DECODERS}
@@ -963,6 +974,46 @@ if(UNIX AND NOT APPLE)
     target_compile_options(Siv3D PUBLIC -msse4.2)
   endif()
 endif()
+if(APPLE)
+  # macOS の OpenGL ES は ANGLE (Metal バックエンド, dylib) で提供する。
+  # エンジン (CWindow::init) が SDL のヒントに渡すファイル名を定義する。
+  # dylib 本体はアプリ側で .app/Contents/Frameworks に同梱する (Siv3DApp の設定を参照)。
+  find_package(unofficial-angle CONFIG REQUIRED)
+  target_compile_definitions(Siv3D PRIVATE
+    SIV3D_ANGLE_GLES_LIB="$<TARGET_FILE_NAME:unofficial::angle::libGLESv2>"
+    SIV3D_ANGLE_EGL_LIB="$<TARGET_FILE_NAME:unofficial::angle::libEGL>"
+  )
+endif()
+if(APPLE)
+  # [暫定] FileSystem のゴミ箱 (g_file_trash) が glib/gio を使うため vcpkg の glib を pkg-config で参照する。
+  # (ゴミ箱を NSFileManager 実装に置き換えた時点で削除する)
+  # (vcpkg の include ルートは同梱 absl 等と衝突するので glib 専用ディレクトリだけを追加し、
+  #  pkg-config が返す -L は Debug/Release で切り替える)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(SIV3D_GIO REQUIRED gio-2.0)
+  set(_siv3d_vcpkg_prefix "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+  target_include_directories(Siv3D PRIVATE
+    "${_siv3d_vcpkg_prefix}/include/glib-2.0"
+    "${_siv3d_vcpkg_prefix}/lib/glib-2.0/include"
+  )
+  set(_siv3d_gio_ldflags ${SIV3D_GIO_STATIC_LDFLAGS})
+  list(FILTER _siv3d_gio_ldflags EXCLUDE REGEX "^-L")
+  string(REPLACE "-framework;" "-framework " _siv3d_gio_ldflags "${_siv3d_gio_ldflags}")
+  target_link_libraries(Siv3D INTERFACE
+    "-L${_siv3d_vcpkg_prefix}/$<$<CONFIG:Debug>:debug/>lib"
+    ${_siv3d_gio_ldflags}
+  )
+endif()
+if(APPLE)
+  # nfd (Cocoa / UniformTypeIdentifiers), DirectoryWatcher (FSEvents), infoware / serial (IOKit)
+  target_link_libraries(Siv3D INTERFACE
+    "-framework Cocoa"
+    "-framework CoreServices"
+    "-framework CoreFoundation"
+    "-framework IOKit"
+    "-framework UniformTypeIdentifiers"
+  )
+endif()
 target_compile_features(Siv3D PRIVATE cxx_std_20 c_std_11)
 target_include_directories(Siv3D
   PRIVATE
@@ -1109,5 +1160,57 @@ if(SIV3D_BUILD_SAMPLE)
       DESTINATION .)
     # エンジン資材 (Resource() = exe のフォルダ/resources/) とサンプル資材 (カレント相対 example/)
     install(DIRECTORY Web/App/resources Web/App/example DESTINATION .)
+  endif()
+  # エンジンリソース (GLES 用 essl シェーダ / フォント / サウンドフォント / テクスチャ) と
+  # サンプル用 example を実行ファイルの隣にコピーする (全プラットフォーム共通)。
+  # Resource() は ModulePath の親ディレクトリ + "resources/" を参照する。
+  # macOS の .app では $<TARGET_FILE_DIR> は Contents/MacOS になる。
+  set(_siv3d_engine_resource_src "${CMAKE_CURRENT_SOURCE_DIR}/Web/App/resources/engine")
+  set(_siv3d_engine_resource_dst "$<TARGET_FILE_DIR:Siv3DApp>/resources/engine")
+  foreach(_dir font soundfont texture shader/essl)
+    add_custom_command(TARGET Siv3DApp POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_siv3d_engine_resource_src}/${_dir}"
+        "${_siv3d_engine_resource_dst}/${_dir}"
+    )
+  endforeach()
+  add_custom_command(TARGET Siv3DApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/WindowsDesktop/App/example"
+      "$<TARGET_FILE_DIR:Siv3DApp>/example"
+    COMMENT "Copying engine resources and examples to output directory"
+  )
+
+  if(APPLE)
+    # macOS: .app バンドルとしてビルドする
+    set_target_properties(Siv3DApp PROPERTIES
+      MACOSX_BUNDLE ON
+      MACOSX_BUNDLE_GUI_IDENTIFIER "com.siv3d.Siv3DApp"
+      MACOSX_BUNDLE_BUNDLE_NAME "Siv3DApp"
+      MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+      MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    )
+
+    # macOS には OpenGL ES が無いので ANGLE (Metal バックエンド) を使う。
+    # SDL3 は GLES コンテキスト要求時に libEGL / libGLESv2 を実行時に dlopen するため、
+    # vcpkg の angle (overlay triplet で dylib 化) を Contents/Frameworks に同梱し、
+    # パスはエンジン (CWindow::init) が SDL のヒントで渡す。
+    set(_siv3d_angle_libs unofficial::angle::libEGL unofficial::angle::libGLESv2)
+    if(TARGET unofficial::angle::libANGLE)
+      get_target_property(_siv3d_angle_type unofficial::angle::libANGLE TYPE)
+      if(_siv3d_angle_type STREQUAL "SHARED_LIBRARY")
+        list(APPEND _siv3d_angle_libs unofficial::angle::libANGLE)
+      endif()
+    endif()
+    set(_siv3d_fw_dir "$<TARGET_BUNDLE_CONTENT_DIR:Siv3DApp>/Frameworks")
+    add_custom_command(TARGET Siv3DApp POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${_siv3d_fw_dir}")
+    foreach(_lib ${_siv3d_angle_libs})
+      add_custom_command(TARGET Siv3DApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${_lib}>" "${_siv3d_fw_dir}/")
+    endforeach()
+    # libSDL3 (Contents/MacOS) と libEGL → libGLESv2 の依存 (@rpath/...) を解決させる
+    set_property(TARGET Siv3DApp APPEND PROPERTY BUILD_RPATH "@executable_path" "@executable_path/../Frameworks")
+    set_property(TARGET Siv3DApp APPEND PROPERTY INSTALL_RPATH "@executable_path" "@executable_path/../Frameworks")
   endif()
 endif()

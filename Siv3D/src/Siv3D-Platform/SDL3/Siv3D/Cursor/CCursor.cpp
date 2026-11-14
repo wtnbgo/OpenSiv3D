@@ -33,9 +33,13 @@ namespace s3d
 		[[nodiscard]]
 		static Vec2 GetClientCursorPos(SDL_Window* window)
 		{
+			// SDL はウィンドウ座標 (ポイント) を返すので、フレームバッファのピクセル座標に変換する
+			// (HiDPI でなければ pixelDensity は 1.0)
 			float clientX, clientY;
 			SDL_GetMouseState(&clientX, &clientY);
-			return{ clientX, clientY };
+			float pixelDensity = SDL_GetWindowPixelDensity(window);
+			if (pixelDensity <= 0.0f) pixelDensity = 1.0f;
+			return{ (clientX * pixelDensity), (clientY * pixelDensity) };
 		}
 
 		[[nodiscard]]

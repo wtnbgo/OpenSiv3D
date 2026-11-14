@@ -20,6 +20,11 @@
 #	include <glib-2.0/glib.h>
 #	include <glib-2.0/gio/gio.h>
 # endif
+# if SIV3D_PLATFORM(MACOS)
+#	include <mach-o/dyld.h>
+#	include <climits>
+#	include <cstdlib>
+# endif
 # include <filesystem>
 # include <Siv3D/String.hpp>
 # include <Siv3D/FileSystem.hpp>
@@ -243,6 +248,20 @@ namespace s3d
 				{
 					g_modulePath = g_modulePath.substr(0, pos);
 				}
+			# elif SIV3D_PLATFORM(MACOS)
+				// argv[0] は相対パスや .app 起動時の不定な値になりうるので、実行ファイルの絶対パスを使う
+				char buf[PATH_MAX];
+				uint32_t size = sizeof(buf);
+				char resolved[PATH_MAX];
+
+				if ((_NSGetExecutablePath(buf, &size) == 0) && ::realpath(buf, resolved))
+				{
+					g_modulePath = Unicode::Widen(resolved);
+				}
+				else
+				{
+					g_modulePath = Unicode::Widen(arg);
+				}
 			# else
 				g_modulePath = Unicode::Widen(arg);
 			# endif
@@ -321,6 +340,20 @@ namespace s3d
 				}
 
 				specialFolderPaths[FromEnum(SpecialFolder::UserProfile)] = (homeDirectory + U'/');
+
+			# if SIV3D_PLATFORM(MACOS)
+				specialFolderPaths[FromEnum(SpecialFolder::Desktop)]		= (homeDirectory + U"/Desktop/");
+				specialFolderPaths[FromEnum(SpecialFolder::Documents)]		= (homeDirectory + U"/Documents/");
+				specialFolderPaths[FromEnum(SpecialFolder::LocalAppData)]	= (homeDirectory + U"/Library/Caches/");
+				specialFolderPaths[FromEnum(SpecialFolder::Music)]			= (homeDirectory + U"/Music/");
+				specialFolderPaths[FromEnum(SpecialFolder::Pictures)]		= (homeDirectory + U"/Pictures/");
+				specialFolderPaths[FromEnum(SpecialFolder::Videos)]			= (homeDirectory + U"/Movies/");
+				specialFolderPaths[FromEnum(SpecialFolder::ProgramFiles)]	= U"/Applications/";
+				specialFolderPaths[FromEnum(SpecialFolder::SystemFonts)]	= U"/System/Library/Fonts/";
+				specialFolderPaths[FromEnum(SpecialFolder::LocalFonts)]		= U"/Library/Fonts/";
+				specialFolderPaths[FromEnum(SpecialFolder::UserFonts)]		= (homeDirectory + U"/Library/Fonts/");
+				return specialFolderPaths;
+			# endif
 
 				const FilePath iniFilePath = homeDirectory + U"/.config/user-dirs.dirs";
 
@@ -535,7 +568,11 @@ namespace s3d
 			{
 				return none;
 			}
+		# if SIV3D_PLATFORM(MACOS)
+			return detail::ToDateTime(s.st_birthtimespec);
+		# else
 			return detail::ToDateTime(s.st_ctim);
+		# endif
 		# endif
 		}
 
@@ -554,7 +591,11 @@ namespace s3d
 			{
 				return none;
 			}
+		# if SIV3D_PLATFORM(MACOS)
+			return detail::ToDateTime(s.st_mtimespec);
+		# else
 			return detail::ToDateTime(s.st_mtim);
+		# endif
 		# endif
 		}
 		
@@ -573,7 +614,11 @@ namespace s3d
 			{
 				return none;
 			}
+		# if SIV3D_PLATFORM(MACOS)
+			return detail::ToDateTime(s.st_atimespec);
+		# else
 			return detail::ToDateTime(s.st_atim);
+		# endif
 		# endif
 		}
 

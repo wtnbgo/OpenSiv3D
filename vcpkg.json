@@ -63,7 +63,14 @@
     "libvorbis",
     "zlib",
     "zstd",
-    "minizip"
+    "minizip",
+    {
+      "name": "angle",
+      "features": [
+        "metal"
+      ],
+      "platform": "osx"
+    }
   ],
   "builtin-baseline": "bc38a15b0bee8bc48a49ea267cc32fbb49aedfc4"
 }
