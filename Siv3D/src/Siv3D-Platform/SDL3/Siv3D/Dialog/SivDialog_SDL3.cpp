@@ -102,7 +102,17 @@ namespace s3d
 				sdlFilters.push_back(SDL_DialogFileFilter{ names[i].c_str(), patterns[i].c_str() });
 			}
 
-			const std::string location = ToNativePath(defaultLocation);
+			// SDL は末尾が区切り文字でない場所をファイルパスとして扱う (macOS では親フォルダを開き、名前欄に入れる) ため、
+			// 既存のディレクトリが指定された場合は末尾に '/' を付ける
+			FilePath locationPath{ defaultLocation };
+
+			if (locationPath && (not locationPath.ends_with(U'/')) && (not locationPath.ends_with(U'\\'))
+				&& FileSystem::IsDirectory(locationPath))
+			{
+				locationPath += U'/';
+			}
+
+			const std::string location = ToNativePath(locationPath);
 			const std::string titleUTF8 = title.narrow();
 
 			SDL_Window* window = static_cast<SDL_Window*>(SIV3D_ENGINE(Window)->getHandle());
