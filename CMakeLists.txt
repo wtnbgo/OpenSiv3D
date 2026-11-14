@@ -37,6 +37,15 @@ set(OpenCV_ROOT "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/opencv4")
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS}) # Not needed for CMake >= 2.8.11
 
+if(UNIX AND NOT APPLE)
+  # Linux: GTK3 (nativefiledialog-extended) と GIO (FileSystem::Remove のゴミ箱) は
+  # vcpkg ではなくシステム (sniper SDK) のものを動的リンクする。
+  # どちらも Steam Linux Runtime / SteamOS / 一般的なデスクトップ環境に必ずあり、
+  # vcpkg で gtk3 一式を静的に抱えるより互換性が高い。
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(SIV3D_LINUX_GTK REQUIRED IMPORTED_TARGET gtk+-3.0 gio-2.0 glib-2.0)
+endif()
+
 # ---------------------------------------------
 # SDL3
 # ---------------------------------------------
@@ -939,6 +948,21 @@ target_link_libraries(Siv3D
 PUBLIC
   SDL3::SDL3
 )
+if(UNIX AND NOT APPLE)
+  target_link_libraries(Siv3D PRIVATE PkgConfig::SIV3D_LINUX_GTK)
+  target_link_libraries(Siv3D_ThirdParty_nfd PRIVATE PkgConfig::SIV3D_LINUX_GTK)
+  # stduuid (UUIDValue::Generate) は Linux では libuuid の uuid_generate を使う。
+  # 実行時の依存を増やさないよう静的ライブラリを優先する
+  find_library(SIV3D_LINUX_UUID_LIBRARY NAMES libuuid.a uuid REQUIRED)
+  target_link_libraries(Siv3D INTERFACE ${SIV3D_LINUX_UUID_LIBRARY})
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    # Platform.hpp は Linux では __SSE4_2__ があるときだけネイティブの SSE 組み込み関数を
+    # 使い、無いと simde の互換定義 (SIMDE_ENABLE_NATIVE_ALIASES) に倒れる。gcc-14 では
+    # その互換定義が <immintrin.h> 系と衝突してコンパイルできないため SSE4.2 を有効にする
+    # (Windows / macOS は常にネイティブ経路)。SIMD.hpp を経由して利用側にも要るので PUBLIC
+    target_compile_options(Siv3D PUBLIC -msse4.2)
+  endif()
+endif()
 target_compile_features(Siv3D PRIVATE cxx_std_20 c_std_11)
 target_include_directories(Siv3D
   PRIVATE
@@ -1048,4 +1072,5 @@ if(SIV3D_BUILD_SAMPLE)
       $<TARGET_FILE_DIR:Siv3DApp>
     COMMENT "Copying SDL3 DLL to output directory"
   )
+
 endif()
