@@ -12,7 +12,6 @@ macOS には OpenGL ES が無いため、[ANGLE](https://chromium.googlesource.c
 | Xcode (Command Line Tools) | Apple clang 17 |
 | CMake | 3.31 (3.20 以上) |
 | Ninja | Homebrew 版 |
-| pkg-config | Homebrew 版 (`brew install pkg-config`。glib の参照に使用) |
 | vcpkg | 環境変数 `VCPKG_ROOT` を設定しておく |
 
 ## ビルド
@@ -76,8 +75,8 @@ Siv3DApp.app/Contents/
 ### その他
 
 - `DirectoryWatcher` は FSEvents による実装です (旧 `Siv3D-Platform/macOS` の実装を移植)。
-- `nativefiledialog-extended` (`nfd_cocoa.m`) のため、CMake で `OBJC` 言語を有効にしています。Cocoa / CoreServices / IOKit などのフレームワークをリンクしています。
-- glib (`FileSystem` のゴミ箱機能が使用) は pkg-config で vcpkg の `gio-2.0` を参照しています。**暫定措置です** (ゴミ箱を NSFileManager による実装に置き換えた時点で外します)。
+- ファイルダイアログは SDL3 (`SDL_ShowFileDialogWithProperties`、NSOpenPanel / NSSavePanel) を使います。
+- ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) は `NSFileManager trashItemAtURL` による実装 (`SivFileSystem_SDL3_macOS.mm`) です。このため CMake で `OBJCXX` 言語を有効にしています。Cocoa / CoreServices / IOKit などのフレームワークをリンクしています。
 
 ## 既知の制限・注意点
 

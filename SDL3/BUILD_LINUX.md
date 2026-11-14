@@ -105,9 +105,10 @@ objdump -T libSDL3.so.0 | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1
 | RPATH | `$ORIGIN` (DT_RPATH) | - |
 | `_Unwind_RaiseException` の定義 | 0 | - |
 
-NEEDED: `libgcc_s.so.1 libpthread.so.0 libdl.so.2 libSDL3.so.0 libgtk-3.so.0 libgdk-3.so.0
-libm.so.6 libgio-2.0.so.0 libgobject-2.0.so.0 libglib-2.0.so.0 libc.so.6 ld-linux-x86-64.so.2`
-(`libSDL3.so.0` 以外は Steam Linux Runtime sniper / SteamOS に含まれる)。
+NEEDED (GTK3 / GIO 依存を外す前の実測): `libgcc_s.so.1 libpthread.so.0 libdl.so.2 libSDL3.so.0
+libgtk-3.so.0 libgdk-3.so.0 libm.so.6 libgio-2.0.so.0 libgobject-2.0.so.0 libglib-2.0.so.0 libc.so.6
+ld-linux-x86-64.so.2` (`libSDL3.so.0` 以外は Steam Linux Runtime sniper / SteamOS に含まれる)。
+現在はファイルダイアログとゴミ箱を置き換えたので、gtk / gdk / gio / gobject / glib は NEEDED から外れる。
 
 ## Linux 固有の構成 (CMakeLists.txt)
 
@@ -124,9 +125,10 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
   `Platform.hpp` は Linux では `__SSE4_2__` があるときだけネイティブの SSE 組み込み関数を使い、
   無い場合の simde 互換経路は gcc-14 の intrinsic ヘッダと衝突してコンパイルできない。
   **実行には SSE4.2 対応 CPU が必要** (2008 年以降の一般的な x86_64 CPU / Steam Deck は対応)
-- **GTK3 / GIO はシステムのものを動的リンク** (pkg-config。暫定): ファイルダイアログ
-  (nativefiledialog-extended) とゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) が使う。
-  SDL3 のファイルダイアログと freedesktop Trash 仕様の自前実装に置き換えて外す予定
+- **GTK3 / GIO / glib に依存しない**: ファイルダイアログは SDL3 (`SDL_ShowFileDialogWithProperties`。
+  xdg-desktop-portal 経由、無ければ zenity)、ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) は
+  freedesktop.org Trash 仕様の自前実装。ダイアログを出すには portal (GNOME / KDE / SteamOS の
+  デスクトップモードには標準である) か zenity が必要
 - **libuuid は SDK の静的ライブラリ** (`libuuid.a`) をリンク (stduuid の `uuid_generate`)
 - **vcpkg.json**: Linux では opencv4 の default-features を切る。既定のままだと
   gtk / highgui 経由で gtk3・cairo・fontconfig 一式を vcpkg でビルドしようとし、

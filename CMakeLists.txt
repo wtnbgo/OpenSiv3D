@@ -14,11 +14,6 @@ project(OpenSiv3D
     DESCRIPTION "A C++20 framework for creative coding (2D/3D games, media art, visualizers, and simulators)."
 )
 
-# macOS: nativefiledialog-extended (nfd_cocoa.m) のために Objective-C を有効化
-if(APPLE)
-  enable_language(OBJC)
-endif()
-
 # Find required packages
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
@@ -41,15 +36,6 @@ find_package(libjpeg-turbo CONFIG QUIET)
 set(OpenCV_ROOT "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/opencv4")
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS}) # Not needed for CMake >= 2.8.11
-
-if(UNIX AND NOT APPLE)
-  # Linux: GTK3 (nativefiledialog-extended) と GIO (FileSystem::Remove のゴミ箱) は
-  # vcpkg ではなくシステム (sniper SDK) のものを動的リンクする。
-  # どちらも Steam Linux Runtime / SteamOS / 一般的なデスクトップ環境に必ずあり、
-  # vcpkg で gtk3 一式を静的に抱えるより互換性が高い。
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(SIV3D_LINUX_GTK REQUIRED IMPORTED_TARGET gtk+-3.0 gio-2.0 glib-2.0)
-endif()
 
 # ---------------------------------------------
 # SDL3
@@ -193,6 +179,14 @@ set(SIV3D_SDL3_SOURCES
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Window/WindowFactory.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/XInput/XInputFactory.cpp
 )
+
+# macOS: ゴミ箱は NSFileManager (Objective-C++)
+if(APPLE)
+  enable_language(OBJCXX)
+  list(APPEND SIV3D_SDL3_SOURCES
+    Siv3D/src/Siv3D-Platform/SDL3/Siv3D/FileSystem/SivFileSystem_SDL3_macOS.mm
+  )
+endif()
 
 set(SIV3D_INTERNAL_SOURCES
  
@@ -859,7 +853,6 @@ add_subdirectory(Siv3D/src/ThirdParty/lunasvg)
 add_subdirectory(Siv3D/src/ThirdParty/minizip)
 add_subdirectory(Siv3D/src/ThirdParty/msdfgen)
 add_subdirectory(Siv3D/src/ThirdParty/muparser)
-add_subdirectory(Siv3D/src/ThirdParty/nativefiledialog-extended)
 add_subdirectory(Siv3D/src/ThirdParty/nlohmann)
 add_subdirectory(Siv3D/src/ThirdParty/Oniguruma)
 add_subdirectory(Siv3D/src/ThirdParty/oscpack)
@@ -909,7 +902,6 @@ add_library(Siv3D STATIC
   $<TARGET_OBJECTS:Siv3D_ThirdParty_minizip>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_msdfgen>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_muparser>
-  $<TARGET_OBJECTS:Siv3D_ThirdParty_nfd>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_nlohmann>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_Oniguruma>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_oscpack>
@@ -960,8 +952,6 @@ PUBLIC
   SDL3::SDL3
 )
 if(UNIX AND NOT APPLE)
-  target_link_libraries(Siv3D PRIVATE PkgConfig::SIV3D_LINUX_GTK)
-  target_link_libraries(Siv3D_ThirdParty_nfd PRIVATE PkgConfig::SIV3D_LINUX_GTK)
   # stduuid (UUIDValue::Generate) は Linux では libuuid の uuid_generate を使う。
   # 実行時の依存を増やさないよう静的ライブラリを優先する
   find_library(SIV3D_LINUX_UUID_LIBRARY NAMES libuuid.a uuid REQUIRED)
@@ -985,33 +975,12 @@ if(APPLE)
   )
 endif()
 if(APPLE)
-  # [暫定] FileSystem のゴミ箱 (g_file_trash) が glib/gio を使うため vcpkg の glib を pkg-config で参照する。
-  # (ゴミ箱を NSFileManager 実装に置き換えた時点で削除する)
-  # (vcpkg の include ルートは同梱 absl 等と衝突するので glib 専用ディレクトリだけを追加し、
-  #  pkg-config が返す -L は Debug/Release で切り替える)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(SIV3D_GIO REQUIRED gio-2.0)
-  set(_siv3d_vcpkg_prefix "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
-  target_include_directories(Siv3D PRIVATE
-    "${_siv3d_vcpkg_prefix}/include/glib-2.0"
-    "${_siv3d_vcpkg_prefix}/lib/glib-2.0/include"
-  )
-  set(_siv3d_gio_ldflags ${SIV3D_GIO_STATIC_LDFLAGS})
-  list(FILTER _siv3d_gio_ldflags EXCLUDE REGEX "^-L")
-  string(REPLACE "-framework;" "-framework " _siv3d_gio_ldflags "${_siv3d_gio_ldflags}")
-  target_link_libraries(Siv3D INTERFACE
-    "-L${_siv3d_vcpkg_prefix}/$<$<CONFIG:Debug>:debug/>lib"
-    ${_siv3d_gio_ldflags}
-  )
-endif()
-if(APPLE)
-  # nfd (Cocoa / UniformTypeIdentifiers), DirectoryWatcher (FSEvents), infoware / serial (IOKit)
+  # FileSystem のゴミ箱 (Foundation), DirectoryWatcher (FSEvents), infoware / serial (IOKit)
   target_link_libraries(Siv3D INTERFACE
     "-framework Cocoa"
     "-framework CoreServices"
     "-framework CoreFoundation"
     "-framework IOKit"
-    "-framework UniformTypeIdentifiers"
   )
 endif()
 target_compile_features(Siv3D PRIVATE cxx_std_20 c_std_11)

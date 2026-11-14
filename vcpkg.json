@@ -21,10 +21,6 @@
     "curl",
     "freetype",
     "giflib",
-    {
-      "name": "glib",
-      "platform": "!linux"
-    },
     "harfbuzz",
     "libjpeg-turbo",
     "libpng",

@@ -17,8 +17,12 @@
 # else
 #	include <sys/stat.h>
 #	include <unistd.h>
-#	include <glib-2.0/glib.h>
-#	include <glib-2.0/gio/gio.h>
+#	include <fcntl.h>
+#	include <cerrno>
+#	include <ctime>
+#	include <cstdio>
+#	include <cstdlib>
+#	include <string>
 # endif
 # if SIV3D_PLATFORM(MACOS)
 #	include <mach-o/dyld.h>
@@ -191,29 +195,213 @@ namespace s3d
 			return (::SHFileOperationW(&fileOp) == 0 && !fileOp.fAnyOperationsAborted);
 		}
 
+	# elif SIV3D_PLATFORM(MACOS)
+
+	} // namespace detail
+
+	// SivFileSystem_SDL3_macOS.mm (NSFileManager trashItemAtURL)
+	bool MacOS_TrashFile(const char* path);
+
+	namespace detail
+	{
+		[[nodiscard]]
+		static bool TrashFile(const FilePathView path)
+		{
+			return MacOS_TrashFile(path.narrow().c_str());
+		}
+
 	# else
 
+		//
+		// freedesktop.org Trash 仕様 (https://specifications.freedesktop.org/trash-spec/) の実装。
+		// GIO の g_file_trash と同じ配置にするので、各デスクトップのゴミ箱から見え、元に戻せる。
+		//   - ホームと同じファイルシステム: $XDG_DATA_HOME/Trash (既定 ~/.local/share/Trash)
+		//   - 別のファイルシステム: <マウントポイント>/.Trash-<uid>
+		//   - files/<名前> に本体、info/<名前>.trashinfo に元のパスと削除日時
+		//
+
 		[[nodiscard]]
-		static bool Linux_TrashFile(const char* path)
+		static std::string TrashURLEncode(const std::string& s)
 		{
-			GFile* gf = g_file_new_for_path(path);
-			GError* ge;
+			static constexpr char Hex[] = "0123456789ABCDEF";
+			std::string out;
+			out.reserve(s.size());
 
-			gboolean ret = g_file_trash(gf, nullptr, &ge);
-
-			if (ge)
+			for (const unsigned char c : s)
 			{
-				g_error_free(ge);
+				if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')
+					|| (c == '-') || (c == '_') || (c == '.') || (c == '~') || (c == '/'))
+				{
+					out.push_back(static_cast<char>(c));
+				}
+				else
+				{
+					out.push_back('%');
+					out.push_back(Hex[c >> 4]);
+					out.push_back(Hex[c & 0xF]);
+				}
 			}
-			
-			g_object_unref(gf);
 
-			if(!ret)
+			return out;
+		}
+
+		[[nodiscard]]
+		static bool MakeDirectory700(const std::string& path)
+		{
+			std::error_code ec;
+			fs::create_directories(path, ec);
+			if (ec)
+			{
+				return false;
+			}
+			::chmod(path.c_str(), 0700);
+			return true;
+		}
+
+		// path と同じデバイス上で、最も上位のディレクトリ (= マウントポイント) を返す
+		[[nodiscard]]
+		static std::string FindMountPoint(const std::string& path, const dev_t dev)
+		{
+			fs::path current = fs::path(path).parent_path();
+
+			while (current.has_parent_path() && (current != current.parent_path()))
+			{
+				struct stat st;
+				if ((::stat(current.parent_path().c_str(), &st) != 0) || (st.st_dev != dev))
+				{
+					break;
+				}
+				current = current.parent_path();
+			}
+
+			return current.string();
+		}
+
+		[[nodiscard]]
+		static bool TrashFile(const FilePathView path)
+		{
+			std::string src = fs::absolute(ToPath(path)).lexically_normal().string();
+
+			while ((1 < src.size()) && src.ends_with('/'))
+			{
+				src.pop_back();
+			}
+
+			struct stat srcStat;
+			if (::lstat(src.c_str(), &srcStat) != 0)
 			{
 				return false;
 			}
 
-			return true;
+			// ホームのゴミ箱
+			std::string homeTrash;
+			if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg)
+			{
+				homeTrash = std::string{ xdg } + "/Trash";
+			}
+			else if (const char* home = std::getenv("HOME"); home && *home)
+			{
+				homeTrash = std::string{ home } + "/.local/share/Trash";
+			}
+			else
+			{
+				return false;
+			}
+
+			if (not MakeDirectory700(homeTrash))
+			{
+				return false;
+			}
+
+			std::string trashDir;
+			std::string infoPath; // .trashinfo の Path= に書く値
+
+			struct stat trashStat;
+			if ((::stat(homeTrash.c_str(), &trashStat) == 0) && (trashStat.st_dev == srcStat.st_dev))
+			{
+				trashDir = homeTrash;
+				infoPath = src; // 絶対パス
+			}
+			else
+			{
+				// 別のファイルシステム: <topdir>/.Trash-<uid> (Path= は topdir からの相対)
+				const std::string topdir = FindMountPoint(src, srcStat.st_dev);
+				trashDir = ((topdir == "/") ? std::string{} : topdir) + "/.Trash-" + std::to_string(::getuid());
+
+				if (not MakeDirectory700(trashDir))
+				{
+					return false;
+				}
+
+				infoPath = fs::path(src).lexically_relative(topdir).string();
+			}
+
+			const std::string filesDir = (trashDir + "/files");
+			const std::string infoDir = (trashDir + "/info");
+
+			if ((not MakeDirectory700(filesDir)) || (not MakeDirectory700(infoDir)))
+			{
+				return false;
+			}
+
+			// 日時 (ローカル時刻、YYYY-MM-DDThh:mm:ss)
+			char dateBuffer[32] = {};
+			{
+				const std::time_t now = std::time(nullptr);
+				std::tm local{};
+				::localtime_r(&now, &local);
+				std::strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%dT%H:%M:%S", &local);
+			}
+
+			const std::string info = ("[Trash Info]\nPath=" + TrashURLEncode(infoPath) + "\nDeletionDate=" + dateBuffer + "\n");
+
+			const std::string baseName = fs::path(src).filename().string();
+
+			// 仕様どおり、先に .trashinfo を O_EXCL で作って名前を確保してから本体を移す
+			for (int n = 1; n < 10000; ++n)
+			{
+				std::string name = baseName;
+
+				if (2 <= n)
+				{
+					const fs::path p{ baseName };
+					name = (p.stem().string() + "." + std::to_string(n) + p.extension().string());
+				}
+
+				const std::string infoFile = (infoDir + "/" + name + ".trashinfo");
+				const std::string destFile = (filesDir + "/" + name);
+
+				struct stat dummy;
+				if (::lstat(destFile.c_str(), &dummy) == 0)
+				{
+					continue;
+				}
+
+				const int fd = ::open(infoFile.c_str(), (O_WRONLY | O_CREAT | O_EXCL), 0600);
+
+				if (fd < 0)
+				{
+					if (errno == EEXIST)
+					{
+						continue;
+					}
+
+					return false;
+				}
+
+				const bool written = (::write(fd, info.data(), info.size()) == static_cast<ssize_t>(info.size()));
+				::close(fd);
+
+				if (written && (::rename(src.c_str(), destFile.c_str()) == 0))
+				{
+					return true;
+				}
+
+				::unlink(infoFile.c_str());
+				return false;
+			}
+
+			return false;
 		}
 
 	# endif
@@ -237,24 +425,29 @@ namespace s3d
 
 			void InitModulePath(const char* arg)
 			{
+				// ModulePath は全 OS で「実行ファイルのフルパス」('/' 区切り) にそろえる。
+				// Resource() は ParentPath(ModulePath()) + "resources/" = 実行ファイルの隣を見る。
 			# if SIV3D_PLATFORM(WINDOWS)
 				(void)arg;
-				wchar_t buf[MAX_PATH];
-				::GetModuleFileNameW(nullptr, buf, MAX_PATH);
-				g_modulePath = FilePath(Unicode::FromWstring(buf));
-				// Remove filename, keep directory
-				const size_t pos = g_modulePath.lastIndexOf(U'/');
-				if (pos != String::npos)
+				std::wstring buf(MAX_PATH, L'\0');
+				for (;;)
 				{
-					g_modulePath = g_modulePath.substr(0, pos);
+					const DWORD len = ::GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+					if (len < buf.size())
+					{
+						buf.resize(len);
+						break;
+					}
+					buf.resize(buf.size() * 2);
 				}
+				g_modulePath = Unicode::FromWstring(buf).replaced(U'\\', U'/');
 			# elif SIV3D_PLATFORM(MACOS)
-				// argv[0] は相対パスや .app 起動時の不定な値になりうるので、実行ファイルの絶対パスを使う
-				char buf[PATH_MAX];
-				uint32_t size = sizeof(buf);
+				// argv[0] はパス無しのコマンド名や相対パスのことがあるので、実行ファイルの絶対パスを使う
+				char pathBuf[PATH_MAX];
+				uint32_t size = sizeof(pathBuf);
 				char resolved[PATH_MAX];
 
-				if ((_NSGetExecutablePath(buf, &size) == 0) && ::realpath(buf, resolved))
+				if ((_NSGetExecutablePath(pathBuf, &size) == 0) && ::realpath(pathBuf, resolved))
 				{
 					g_modulePath = Unicode::Widen(resolved);
 				}
@@ -263,7 +456,9 @@ namespace s3d
 					g_modulePath = Unicode::Widen(arg);
 				}
 			# else
-				g_modulePath = Unicode::Widen(arg);
+				std::error_code ec;
+				const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+				g_modulePath = ((not ec) && (not exe.empty())) ? Unicode::Widen(exe.string()) : Unicode::Widen(arg);
 			# endif
 			}
 
@@ -396,7 +591,9 @@ namespace s3d
 	{
 		bool IsResourcePath(const FilePathView path) noexcept
 		{
-			const FilePath resourceDirectory = FileSystem::ModulePath() + U"/resources/";
+			// ParentPath() は IsResourcePath() を呼ぶので (再帰になる) ここでは使わない
+			const FilePath& modulePath = FileSystem::ModulePath();
+			const FilePath resourceDirectory = (modulePath.substr(0, (modulePath.lastIndexOf(U'/') + 1)) + U"resources/");
 
 			return FullPath(path).starts_with(resourceDirectory);
 		}
@@ -817,11 +1014,7 @@ namespace s3d
 				}
 			}
 
-		# if SIV3D_PLATFORM(WINDOWS)
 			return detail::TrashFile(path);
-		# else
-			return detail::Linux_TrashFile(path.narrow().c_str());
-		# endif
 		}
 
 		bool RemoveContents(const FilePathView path, const AllowUndo allowUndo)
