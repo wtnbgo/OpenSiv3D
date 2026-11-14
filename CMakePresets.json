@@ -56,7 +56,8 @@
             "inherits": "default",
             "cacheVariables": {
                 "VCPKG_CRT_LINKAGE":"dynamic",
-                "VCPKG_LIBRARY_LINKAGE":"static"
+                "VCPKG_LIBRARY_LINKAGE":"static",
+                "VCPKG_OVERLAY_TRIPLETS":"${sourceDir}/cmake/vcpkg-triplets"
             }
         },
         {
