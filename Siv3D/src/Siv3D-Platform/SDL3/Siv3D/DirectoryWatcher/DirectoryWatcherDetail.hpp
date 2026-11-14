@@ -13,6 +13,10 @@
 # include <Siv3D/DirectoryWatcher.hpp>
 # if SIV3D_PLATFORM(WINDOWS)
 #	include <Siv3D/Windows/Windows.hpp>
+# elif SIV3D_PLATFORM(MACOS)
+#	include <atomic>
+#	include <mutex>
+#	include <CoreServices/CoreServices.h>
 # else
 #	include <thread>
 #	include <atomic>
@@ -75,6 +79,26 @@ namespace s3d
 		static void Update(std::stop_token stop_token, DirectoryWatcherDetail* watcher);
 
 		static void CALLBACK OnChangeNotification(const DWORD dwErrorCode, const DWORD dwNumberOfBytesTransfered, const LPOVERLAPPED lpOverlapped);
+
+	# elif SIV3D_PLATFORM(MACOS)
+
+		static constexpr double LatencySec = 0.25;
+
+		bool m_isActive = false;
+
+		FilePath m_targetDirectory;
+
+		FSEventStreamRef m_eventStream = nullptr;
+
+		std::atomic<bool> m_abort = false;
+
+		std::mutex m_changesMutex;
+
+		Array<FileChange> m_fileChanges;
+
+		static void OnChange(ConstFSEventStreamRef, void* pWatch, size_t eventCount, void* paths, const FSEventStreamEventFlags flags[], const FSEventStreamEventId[]);
+
+		void processChanges(const size_t eventCount, void* paths, const FSEventStreamEventFlags flags[]);
 
 	# else
 

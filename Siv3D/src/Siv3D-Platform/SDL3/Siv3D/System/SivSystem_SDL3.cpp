@@ -311,8 +311,13 @@ namespace s3d
 			}
 
 			std::string urlc = url.toUTF8();
+		# if SIV3D_PLATFORM(MACOS)
+			char* argv[] = { (char*)"open", urlc.data(), nullptr };
+			return detail::Run("/usr/bin/open", argv);
+		# else
 			char* argv[] = { (char*)"xdg-open", urlc.data(), nullptr };
 			return detail::Run("/usr/bin/xdg-open", argv);
+		# endif
 		}
 
 		bool ShowInFileManager(const FilePathView path)
@@ -411,7 +416,11 @@ namespace s3d
 
 		bool LaunchFile(const FilePathView fileName)
 		{
+		# if SIV3D_PLATFORM(MACOS)
+			const std::string command = ("open " + detail::Escape(fileName.narrow()));
+		# else
 			const std::string command = ("xdg-open " + detail::Escape(fileName.narrow()));
+		# endif
 
 			return (std::system(command.c_str()) == 0);
 		}

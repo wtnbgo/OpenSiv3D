@@ -16,6 +16,7 @@
 # include <Siv3D/Error.hpp>
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/Unicode.hpp>
+# include <Siv3D/FileSystem.hpp>
 
 void Main();
 
@@ -29,7 +30,7 @@ namespace s3d::detail::init
 int main(int argc, char* argv[])
 {
 	using namespace s3d;
-	std::clog << "OpenSiv3D for Linux\n";
+	std::clog << "OpenSiv3D for " << Unicode::Narrow(SIV3D_PLATFORM_NAME) << " (SDL3)\n";
 
 	detail::init::InitCommandLines(argc, argv);
 	detail::init::InitModulePath(argv[0]);
@@ -46,6 +47,20 @@ int main(int argc, char* argv[])
 		// 指定パス内の resources/ をリソースディレクトリとして設定
 		detail::init::SetCustomResourceDirectory(Unicode::Widen((appDirectory / "resources").string()));
 	}
+# if SIV3D_PLATFORM(MACOS)
+	else
+	{
+		// .app バンドルとして起動された場合 (Finder / open) カレントディレクトリは "/" になるため、
+		// 実行ファイルのディレクトリ (Contents/MacOS/) をカレントディレクトリにする
+		const std::filesystem::path modulePath{ FileSystem::ModulePath().toUTF8() };
+
+		if (modulePath.parent_path().string().ends_with(".app/Contents/MacOS"))
+		{
+			std::error_code ec;
+			std::filesystem::current_path(modulePath.parent_path(), ec);
+		}
+	}
+# endif
 
 	Siv3DEngine engine;
 	
