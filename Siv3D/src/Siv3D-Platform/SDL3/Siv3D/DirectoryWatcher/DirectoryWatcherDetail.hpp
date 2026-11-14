@@ -18,6 +18,7 @@
 #	include <atomic>
 #	include <mutex>
 #	include <boost/bimap.hpp>
+#	include <sys/inotify.h>
 # endif
 
 namespace s3d

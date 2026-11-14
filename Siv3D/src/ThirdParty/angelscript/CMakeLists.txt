@@ -1,5 +1,9 @@
 # angelscript library
-enable_language(ASM_MASM)
+# x64 MSVC 用の呼び出し規約サンク (.asm) は MSVC のときだけ組み込む
+if(MSVC)
+  enable_language(ASM_MASM)
+  set(AS_MSVC_ASM_SOURCES as_callfunc_x64_msvc_asm.asm)
+endif()
 add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_atomic.cpp
   as_builder.cpp
@@ -14,7 +18,7 @@ add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_callfunc_x64_gcc.cpp
   as_callfunc_x64_mingw.cpp
   as_callfunc_x64_msvc.cpp
-  as_callfunc_x64_msvc_asm.asm
+  ${AS_MSVC_ASM_SOURCES}
   as_callfunc_x86.cpp
   as_callfunc_xenon.cpp
   as_compiler.cpp

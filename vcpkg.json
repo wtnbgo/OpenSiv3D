@@ -21,7 +21,10 @@
     "curl",
     "freetype",
     "giflib",
-    "glib",
+    {
+      "name": "glib",
+      "platform": "!linux"
+    },
     "harfbuzz",
     "libjpeg-turbo",
     "libpng",
@@ -35,7 +38,22 @@
         "tiff",
         "quirc",
         "thread"
-      ]
+      ],
+      "platform": "!linux"
+    },
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": [
+        "calib3d",
+        "jpeg",
+        "png",
+        "webp",
+        "tiff",
+        "quirc",
+        "thread"
+      ],
+      "platform": "linux"
     },
     "opengl",
     "opus",
