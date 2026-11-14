@@ -174,6 +174,14 @@ set(SIV3D_SDL3_SOURCES
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/XInput/XInputFactory.cpp
 )
 
+# macOS: ゴミ箱は NSFileManager (Objective-C++)
+if(APPLE)
+  enable_language(OBJCXX)
+  list(APPEND SIV3D_SDL3_SOURCES
+    Siv3D/src/Siv3D-Platform/SDL3/Siv3D/FileSystem/SivFileSystem_SDL3_macOS.mm
+  )
+endif()
+
 set(SIV3D_INTERNAL_SOURCES
  
 #  Siv3D/src/Siv3D-Platform/OpenGL4/Siv3D/ConstantBuffer/GL4/ConstantBufferDetail_GL4.cpp
@@ -839,7 +847,6 @@ add_subdirectory(Siv3D/src/ThirdParty/lunasvg)
 add_subdirectory(Siv3D/src/ThirdParty/minizip)
 add_subdirectory(Siv3D/src/ThirdParty/msdfgen)
 add_subdirectory(Siv3D/src/ThirdParty/muparser)
-add_subdirectory(Siv3D/src/ThirdParty/nativefiledialog-extended)
 add_subdirectory(Siv3D/src/ThirdParty/nlohmann)
 add_subdirectory(Siv3D/src/ThirdParty/Oniguruma)
 add_subdirectory(Siv3D/src/ThirdParty/oscpack)
@@ -889,7 +896,6 @@ add_library(Siv3D STATIC
   $<TARGET_OBJECTS:Siv3D_ThirdParty_minizip>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_msdfgen>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_muparser>
-  $<TARGET_OBJECTS:Siv3D_ThirdParty_nfd>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_nlohmann>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_Oniguruma>
   $<TARGET_OBJECTS:Siv3D_ThirdParty_oscpack>
@@ -933,6 +939,7 @@ target_link_libraries(Siv3D INTERFACE
   ${CMAKE_DL_LIBS}
   $<$<PLATFORM_ID:Windows>:version>
   $<$<PLATFORM_ID:Windows>:winmm>
+  "$<$<PLATFORM_ID:Darwin>:-framework Foundation>"
   $<$<TARGET_EXISTS:libjpeg-turbo::turbojpeg-static>:libjpeg-turbo::turbojpeg-static>
 )
 target_link_libraries(Siv3D

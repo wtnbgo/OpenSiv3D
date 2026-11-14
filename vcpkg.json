@@ -21,7 +21,6 @@
     "curl",
     "freetype",
     "giflib",
-    "glib",
     "harfbuzz",
     "libjpeg-turbo",
     "libpng",
