@@ -78,6 +78,22 @@ namespace s3d
 			return s;
 		}
 
+		// SDL3 はファイル用ダイアログの location を「ファイルのパス」として扱い、末尾が '/' で
+		// なければ最後の要素をファイル名、その親を初期フォルダにする (portal / zenity とも)。
+		// Siv3D の defaultPath は初期ディレクトリなので、末尾に '/' を付けて渡す
+		[[nodiscard]]
+		FilePath AsDirectoryLocation(const FilePathView path)
+		{
+			FilePath location{ path };
+
+			if (location && (not location.ends_with(U'/')) && (not location.ends_with(U'\\')))
+			{
+				location += U'/';
+			}
+
+			return location;
+		}
+
 		[[nodiscard]]
 		Array<FilePath> ShowDialog(const SDL_FileDialogType type, const Array<FileFilter>& filters,
 			const FilePathView defaultLocation, const StringView title, const bool allowMany)
@@ -163,7 +179,7 @@ namespace s3d
 	{
 		Optional<FilePath> OpenFile(const Array<FileFilter>& filters, const FilePathView defaultPath, const StringView title)
 		{
-			const Array<FilePath> paths = ShowDialog(SDL_FILEDIALOG_OPENFILE, filters, defaultPath, title, false);
+			const Array<FilePath> paths = ShowDialog(SDL_FILEDIALOG_OPENFILE, filters, AsDirectoryLocation(defaultPath), title, false);
 
 			if (paths.isEmpty())
 			{
@@ -175,13 +191,13 @@ namespace s3d
 
 		Array<FilePath> OpenFiles(const Array<FileFilter>& filters, const FilePathView defaultPath, const StringView title)
 		{
-			return ShowDialog(SDL_FILEDIALOG_OPENFILE, filters, defaultPath, title, true);
+			return ShowDialog(SDL_FILEDIALOG_OPENFILE, filters, AsDirectoryLocation(defaultPath), title, true);
 		}
 
 		Optional<FilePath> SaveFile(const Array<FileFilter>& filters, const FilePathView defaultPath, const StringView title, const StringView defaultFileName)
 		{
 			// 保存ダイアログの初期位置にはファイル名まで含めたパスを渡せる
-			FilePath location{ defaultPath };
+			FilePath location = AsDirectoryLocation(defaultPath);
 
 			if (defaultFileName)
 			{
