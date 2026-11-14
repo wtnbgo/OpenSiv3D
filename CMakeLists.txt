@@ -14,6 +14,12 @@ project(OpenSiv3D
     DESCRIPTION "A C++20 framework for creative coding (2D/3D games, media art, visualizers, and simulators)."
 )
 
+# macOS: ゴミ箱 (SivFileSystem_SDL3_macOS.mm) のために Objective-C++ を有効化
+# (enable_language は project() 直後で行わないと生成時に CMAKE_OBJCXX_COMPILE_OBJECT が見つからない)
+if(APPLE)
+  enable_language(OBJCXX)
+endif()
+
 # Find required packages
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
@@ -182,7 +188,6 @@ set(SIV3D_SDL3_SOURCES
 
 # macOS: ゴミ箱は NSFileManager (Objective-C++)
 if(APPLE)
-  enable_language(OBJCXX)
   list(APPEND SIV3D_SDL3_SOURCES
     Siv3D/src/Siv3D-Platform/SDL3/Siv3D/FileSystem/SivFileSystem_SDL3_macOS.mm
   )
