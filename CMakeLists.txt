@@ -1073,4 +1073,39 @@ if(SIV3D_BUILD_SAMPLE)
     COMMENT "Copying SDL3 DLL to output directory"
   )
 
+  if(UNIX AND NOT APPLE)
+    # Linux: steamrt sniper SDK (glibc 2.31) でのビルド・配布を想定した設定 (SDL3/BUILD_LINUX.md)
+    #
+    # 同梱 libSDL3 を exe と同じフォルダから確実に読ませる。Steam 起動時は
+    # LD_LIBRARY_PATH の先頭に Steam ランタイムや /usr/lib が入るため、
+    # LD_LIBRARY_PATH の後に探される RUNPATH ではシステム側の libSDL3 が勝ってしまう。
+    # LD_LIBRARY_PATH より先に探される DT_RPATH ($ORIGIN) にする。
+    set_target_properties(Siv3DApp PROPERTIES
+      BUILD_RPATH "\$ORIGIN"
+      INSTALL_RPATH "\$ORIGIN"
+    )
+    target_link_options(Siv3DApp PRIVATE "LINKER:--disable-new-dtags")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # 例外の巻き戻し処理 (libgcc の unwinder) は共有の libgcc_s.so.1 から解決させる。
+      # sniper SDK の gcc-14 は libstdc++ / libgcc を静的にリンクする (-shared-libgcc も
+      # 効かない) ため、共有ライブラリ側と unwinder の複製を持ち合わないよう直接リンクする。
+      # libstdc++ は静的のままなので GLIBCXX 依存は増えない。
+      target_link_options(Siv3DApp PRIVATE
+        "SHELL:-Wl,--push-state,--no-as-needed -l:libgcc_s.so.1 -Wl,--pop-state")
+    endif()
+    # exe が NEEDED で引く soname (libSDL3.so.0) のリンクもビルドツリーに置く
+    add_custom_command(TARGET Siv3DApp POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E create_symlink
+        $<TARGET_FILE_NAME:SDL3::SDL3-shared>
+        $<TARGET_FILE_DIR:Siv3DApp>/$<TARGET_SONAME_FILE_NAME:SDL3::SDL3-shared>
+    )
+
+    # install: <prefix>/ 直下に そのまま起動できる形で配置する
+    #   Siv3DApp, libSDL3.so.0.x.y, libSDL3.so.0, resources/ (エンジン資材), example/
+    install(TARGETS Siv3DApp RUNTIME DESTINATION .)
+    install(FILES
+      $<TARGET_FILE:SDL3::SDL3-shared>
+      $<TARGET_SONAME_FILE:SDL3::SDL3-shared>
+      DESTINATION .)
+  endif()
 endif()
