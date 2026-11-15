@@ -63,6 +63,10 @@ if(APPLE)
   # 実行時リンクをやめてフレームワークを直接リンクする (リンクはトップの CMakeLists.txt で Siv3D に追加)
   target_compile_definitions(Siv3D_ThirdParty_soloud PRIVATE MA_NO_RUNTIME_LINKING)
 endif()
+if(IOS)
+  # iOS の miniaudio は AVAudioSession (AVFoundation、Objective-C) を使うので Objective-C++ としてコンパイルする
+  set_source_files_properties(src/backend/miniaudio/soloud_miniaudio.cpp PROPERTIES LANGUAGE OBJCXX)
+endif()
 set_target_properties(Siv3D_ThirdParty_soloud PROPERTIES
   CXX_EXTENSIONS OFF
   C_EXTENSIONS OFF

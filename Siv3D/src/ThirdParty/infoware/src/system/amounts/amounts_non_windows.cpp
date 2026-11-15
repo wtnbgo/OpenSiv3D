@@ -16,7 +16,15 @@
 #include "infoware/detail/scope.hpp"
 #include "infoware/system.hpp"
 #include <cstring>
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+// [Siv3D] iOS には wordexp が無い (数えるのは Linux の /dev/input なので、iOS では常に 0)
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#define SIV3D_INFOWARE_NO_WORDEXP 1
+#else
 #include <wordexp.h>
+#endif
 
 template <class Callback>
 class ScopeGuard final
@@ -45,6 +53,10 @@ public:
 
 // http://man7.org/linux/man-pages/man3/wordexp.3.html
 static std::size_t count_expansions(const char* of) noexcept {
+#ifdef SIV3D_INFOWARE_NO_WORDEXP
+	(void)of;
+	return 0;
+#else
 	wordexp_t exp{};
 	ScopeGuard exp_deleter{[&]() { wordfree(&exp); }};
 
@@ -56,6 +68,7 @@ static std::size_t count_expansions(const char* of) noexcept {
 		return 0;
 	else
 		return exp.we_wordc;
+#endif
 }
 
 

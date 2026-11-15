@@ -11,7 +11,11 @@
 
 
 #ifndef _WIN32
-#ifndef __APPLE__
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+// [Siv3D] iOS でもこの空の実装を使う
+#if !defined(__APPLE__) || TARGET_OS_IPHONE
 #ifndef INFOWARE_USE_X11
 
 

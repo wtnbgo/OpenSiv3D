@@ -30,6 +30,12 @@
 #include <AvailabilityMacros.h>
 #include <mach/clock.h>
 #include <mach/mach.h>
+#include <TargetConditionals.h>
+#endif
+
+// [Siv3D] iOS には IOKit (IOSSIOSPEED) が無い
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#define SIV3D_SERIAL_NO_IOKIT 1
 #endif
 
 #include "serial/impl/unix.h"
@@ -42,7 +48,7 @@
 #endif
 #endif
 
-#if defined(MAC_OS_X_VERSION_10_3) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_3)
+#if defined(MAC_OS_X_VERSION_10_3) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_3) && !defined(SIV3D_SERIAL_NO_IOKIT)
 #include <IOKit/serial/ioss.h>
 #endif
 
@@ -305,7 +311,7 @@ Serial::SerialImpl::reconfigurePort ()
   default:
     custom_baud = true;
     // OS X support
-#if defined(MAC_OS_X_VERSION_10_4) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_4)
+#if defined(MAC_OS_X_VERSION_10_4) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_4) && !defined(SIV3D_SERIAL_NO_IOKIT)
     // Starting with Tiger, the IOSSIOSPEED ioctl can be used to set arbitrary baud rates
     // other than those specified by POSIX. The driver for the underlying serial hardware
     // ultimately determines which baud rates can be used. This ioctl sets both the input

@@ -14,6 +14,10 @@
 
 
 #ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+// [Siv3D] iOS には ApplicationServices (CGDisplay) が無いので displays_default_blank.cpp を使う
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
 
 
 #include "infoware/detail/scope.hpp"
