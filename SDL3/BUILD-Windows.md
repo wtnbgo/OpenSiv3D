@@ -56,7 +56,10 @@ Siv3DApp.exe
 - **ゴミ箱** (`FileSystem::Remove(path, AllowUndo::Yes)`): `SHFileOperationW` (`FOF_ALLOWUNDO`)。
 - **音声**: SoLoud の miniaudio バックエンド (WASAPI) で再生します。起動ログに `Audio backend: MiniAudio` と出ます。オーディオデバイスが無い場合は NoSound バックエンドにフォールバックします。
 - **音声ファイル**: WAVE / Ogg Vorbis / Opus / MIDI は共通実装、MP3 / FLAC は soloud 同梱の dr_mp3 / dr_flac でデコードします (全 OS 共通)。
-- **動画** (`VideoReader` / `VideoTexture`): OpenCV の Media Foundation (MSMF) バックエンド。
+- **動画** (`VideoReader` / `VideoTexture`): WebM (VP8 / VP9) は [movie-player](https://github.com/wamsoft/movie-player) (libvpx) で、それ以外 (MP4 など) は OpenCV の Media Foundation (MSMF) バックエンドで読み込みます。
+  - `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で作成すると、音声トラック (Vorbis / Opus) を持つ WebM は映像と音声を同期して再生します (音声は `getAudio()` の `Audio` から鳴り、`pause()` すると映像も止まります)。
+  - movie-player は CMake の FetchContent で取得し、Siv3D に組み込みます。`-DSIV3D_WITH_MOVIEPLAYER=OFF` で外せます (その場合 WebM は OpenCV に任せます)。
+  - 色変換の libyuv は、movie-player 同梱のビルド済みライブラリ (clang でビルドした SIMD 有効版、静的 CRT) を使います。
 
 ## 既知の制限・注意点
 
@@ -73,3 +76,5 @@ Siv3DApp.exe
 - ファイルダイアログ 4 種 (OpenFile / OpenFiles / SaveFile / SelectFolder) のタイトル・フィルタ・初期フォルダ・戻り値・キャンセル、ダイアログ表示中に終了要求を送ったときに空の結果で戻って正常終了すること
 - ゴミ箱への移動
 - `example/test.mp3` (MP3) と `example/midi/test.mid` (MIDI) の読み込みと再生、`example/video/river.mp4` を `VideoReader` で開いてフレームを取得できること
+- WebM (VP9 1080p 30fps、Opus 音声、DefaultDuration 無し) を `VideoReader` で開き、フレームレートの推定 (30.000)・フレームの取得・シークができること、`VideoTexture` で描画できること
+- 同じ WebM を `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で音声付き再生し、再生位置が音声の時計に従って進むこと、`getAudio().pause()` で映像も止まること、`setPosSec()` でシークできること

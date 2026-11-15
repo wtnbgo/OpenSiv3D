@@ -142,7 +142,10 @@ Common implementation across platforms (全 OS 共通の実装):
 - **File dialogs**: `SDL_ShowFileDialogWithProperties` (Windows common dialog / macOS NSOpenPanel / Linux xdg-desktop-portal or zenity)
 - **Trash** (`FileSystem::Remove(path, AllowUndo::Yes)`): `SHFileOperationW` / `NSFileManager` / freedesktop.org Trash spec
 - **Audio**: SoLoud + miniaudio (WASAPI / Core Audio / PulseAudio・ALSA). MP3 and FLAC are decoded with dr_mp3 / dr_flac on every platform
-- **Video** (`VideoReader` / `VideoTexture`): OpenCV (Media Foundation on Windows, AVFoundation on macOS, FFmpeg on Linux — LGPL build bundled as shared libraries)
+- **Video** (`VideoReader` / `VideoTexture`):
+  - WebM (VP8 / VP9) on every platform with [movie-player](https://github.com/wamsoft/movie-player) (libvpx, MIT). `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` also plays the WebM's audio track (Vorbis / Opus) in sync, via `getAudio()`
+  - Other formats (MP4 etc.) with OpenCV: Media Foundation on Windows, AVFoundation on macOS, FFmpeg on Linux (LGPL build bundled as shared libraries)
+- **CMake options**: `SIV3D_WITH_MOVIEPLAYER` (default ON) and `SIV3D_WITH_FFMPEG` (default ON, Linux only). With `-DSIV3D_WITH_FFMPEG=OFF` no FFmpeg (LGPL) is built or bundled; Linux can then open WebM only
 
 Known limitations (主な制限):
 
