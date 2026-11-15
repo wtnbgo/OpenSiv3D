@@ -18,7 +18,7 @@
 #   --project DIR    アプリのフォルダ (siv3d-app.json がある場所。既定: カレントディレクトリ)
 #   --target T       windows / linux / macos (既定: 実行中の OS)
 #   --config C       Release / Debug / RelWithDebInfo (既定: Release)
-#   --native         linux: コンテナを使わずホストで直接ビルドする
+#   --native         linux: コンテナを使わずホストで直接ビルドする (出力は build/linux-native)
 #   --container IMG  linux: ビルドに使うコンテナイメージ (既定: siv3d-app.json の linux.container)
 #   --engine E       linux: コンテナの実行に使うコマンド auto / docker / wslc / podman
 #                    (既定: siv3d-app.json の linux.engine、無ければ auto =
@@ -84,7 +84,7 @@ def run(cmd, cwd=None, env=None):
 # -----------------------------------------------------------------------------
 
 class App:
-    def __init__(self, project_dir, target, config):
+    def __init__(self, project_dir, target, config, build_name=None):
         self.project_dir = Path(project_dir).resolve()
         self.target = target
         self.config = config
@@ -99,7 +99,9 @@ class App:
         self.version = self.json.get("version", "1.0.0")
         self.target_json = self.json.get(target, {})
 
-        self.build_dir = self.project_dir / "build" / target
+        # linux: ホストで直接ビルドする場合 (--native) はコンテナのビルドツリー (パスが /app/... ) と
+        # 混ざらないよう build/linux-native を使う
+        self.build_dir = self.project_dir / "build" / (build_name or target)
         self.cmake_dir = self.build_dir / "cmake"
         self.dist_dir = self.build_dir / "dist"
         self.package_dir = self.build_dir / "package"
@@ -299,7 +301,7 @@ def run_in_container(app, args, commands):
     # コンパイラ・vcpkg のバイナリキャッシュ (名前付きボリューム deckbuild-cache) は steamdev の
     # deckbuild.sh と同じ設定にする (sniper SDK の既定の gcc は古いので gcc-14 を使う)
     inner = " ".join(["mkdir -p /cache/vcpkg-bincache &&",
-                      "python3", "/siv3d/tools/siv3d_app.py", "--native", "--target", "linux",
+                      "python3", "/siv3d/tools/siv3d_app.py", "--native", "--in-container", "--target", "linux",
                       "--config", app.config, "--project", "/app"] + commands)
     cmd = [engine, "run", "--rm",
            "-v", f"{app.project_dir}:/app",
@@ -331,11 +333,13 @@ def main():
     parser.add_argument("--target", choices=TARGETS, default=host_target())
     parser.add_argument("--config", default="Release")
     parser.add_argument("--native", action="store_true")
+    parser.add_argument("--in-container", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--container")
     parser.add_argument("--engine", choices=["auto", "docker", "wslc", "podman"])
     args = parser.parse_args()
 
-    app = App(args.project, args.target, args.config)
+    build_name = "linux-native" if (args.target == "linux" and args.native and not args.in_container) else None
+    app = App(args.project, args.target, args.config, build_name)
 
     commands = []
     for c in args.commands:
