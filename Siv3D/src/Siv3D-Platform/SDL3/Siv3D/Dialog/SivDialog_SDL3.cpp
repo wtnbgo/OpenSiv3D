@@ -22,6 +22,13 @@
 # include <Siv3D/UserAction/IUserAction.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 
+# if SIV3D_PLATFORM(LINUX)
+#	include <csignal>
+#	include <fstream>
+#	include <filesystem>
+#	include <unistd.h>
+# endif
+
 //
 // SDL3 のファイルダイアログ (SDL_ShowFileDialogWithProperties) による実装。
 //   Windows: コモンダイアログ / macOS: NSOpenPanel・NSSavePanel /
@@ -48,6 +55,56 @@ namespace s3d
 		// その間に開かれたダイアログは表示せずにキャンセル扱いで返す
 		// (QUIT はすでにキューから取り出されているので、表示すると終了要求を検出できず固まる)。
 		bool g_quitRequested = false;
+
+	# if SIV3D_PLATFORM(LINUX)
+
+		// zenity フォールバック時、SDL3 は zenity を自プロセスの子として起動し、閉じる API を持たない。
+		// 終了要求で待機を打ち切ってもダイアログ (zenity) は残り、アプリ終了後も画面に出たままになるため、
+		// 自プロセスを親に持つ zenity にだけ SIGKILL を送って閉じる (portal の場合は D-Bus の切断で portal 側が閉じる)。
+		// SDL3 はシグナルをブロックしたスレッドから zenity を起動するため、子は SIGTERM / SIGINT / SIGHUP を
+		// ブロックした状態を引き継いでおり、SIGTERM では終了しない (ファイル選択だけなので強制終了で問題ない)
+		void CloseChildZenityDialogs()
+		{
+			const pid_t self = ::getpid();
+			std::error_code ec;
+
+			for (const auto& entry : std::filesystem::directory_iterator{ "/proc", ec })
+			{
+				const std::string name = entry.path().filename().string();
+
+				if (name.empty() || (name.find_first_not_of("0123456789") != std::string::npos))
+				{
+					continue;
+				}
+
+				// /proc/<pid>/stat: "<pid> (<comm>) <state> <ppid> ..."
+				std::ifstream ifs{ entry.path() / "stat" };
+				std::string stat;
+				std::getline(ifs, stat);
+
+				const size_t open = stat.find('(');
+				const size_t close = stat.rfind(')');
+
+				if ((open == std::string::npos) || (close == std::string::npos) || (close < open))
+				{
+					continue;
+				}
+
+				const std::string comm = stat.substr(open + 1, (close - open - 1));
+				char state = 0;
+				long ppid = 0;
+
+				if ((comm != "zenity") || (std::sscanf(stat.c_str() + close + 1, " %c %ld", &state, &ppid) != 2) || (ppid != self))
+				{
+					continue;
+				}
+
+				LOG_INFO(U"File dialog: closing zenity (pid {})"_fmt(Unicode::Widen(name)));
+				::kill(static_cast<pid_t>(std::stol(name)), SIGKILL);
+			}
+		}
+
+	# endif
 
 		[[nodiscard]]
 		bool HasQuitEvent()
@@ -239,6 +296,9 @@ namespace s3d
 					if (g_quitRequested)
 					{
 						LOG_INFO(U"File dialog: abandoned by quit request");
+					# if SIV3D_PLATFORM(LINUX)
+						CloseChildZenityDialogs();
+					# endif
 						return{};
 					}
 				# endif
