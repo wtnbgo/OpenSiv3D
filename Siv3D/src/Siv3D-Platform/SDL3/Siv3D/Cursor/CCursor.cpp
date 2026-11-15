@@ -93,14 +93,9 @@ namespace s3d
 		m_window = static_cast<SDL_Window*>(SIV3D_ENGINE(Window)->getHandle());
 
 		{
+			// 初期化時は Renderer がまだ無いので、レターボックスの変換は update() で反映する
 			const Vec2 clientPos = detail::GetClientCursorPos(m_window);
-			const Point screenPos = detail::GetScreenPos();
-			
-			const Vec2 frameBufferSize = SIV3D_ENGINE(Window)->getState().frameBufferSize;
-			const Vec2 virtualSize = SIV3D_ENGINE(Window)->getState().virtualSize;
-			const double uiScaling = (virtualSize.x > 0) ? (frameBufferSize.x / virtualSize.x) : 1.0;
-			
-			m_state.update(clientPos.asPoint(), clientPos / uiScaling, screenPos);
+			m_state.update(clientPos.asPoint(), clientPos, detail::GetScreenPos());
 		}
 
 		m_systemCursors[FromEnum(CursorStyle::Arrow)]			= SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
@@ -129,14 +124,19 @@ namespace s3d
 		}
 
 		{
-			const Vec2 clientPos = detail::GetClientCursorPos(m_window);
-			const Point screenPos = detail::GetScreenPos();
-			
-			const Vec2 frameBufferSize = SIV3D_ENGINE(Window)->getState().frameBufferSize;
-			const Vec2 virtualSize = SIV3D_ENGINE(Window)->getState().virtualSize;
-			const double uiScaling = (virtualSize.x > 0) ? (frameBufferSize.x / virtualSize.x) : 1.0;
-			
-			m_state.update(clientPos.asPoint(), clientPos / uiScaling, screenPos);
+			// シーンの拡大と余白 (レターボックス) を反映する (WindowsDesktop 版と同じ)。
+			// Scene の拡大表示 (ResizeMode::Keep など) や Android の全画面で、タッチ位置とシーン座標がずれないようにする
+			auto [s, viewRect]	= SIV3D_ENGINE(Renderer)->getLetterboxComposition();
+			m_transformScreen	= Mat3x2::Scale(s).translated(viewRect.pos);
+			m_transformAll		= (m_transformLocal * m_transformCamera * m_transformScreen);
+			m_transformAllInv	= m_transformAll.inverse();
+		}
+
+		{
+			// クライアント座標 (フレームバッファのピクセル) をシーン座標に変換する
+			const Vec2 clientRawPos = detail::GetClientCursorPos(m_window);
+			const Vec2 clientPos = m_transformAllInv.transformPoint(clientRawPos);
+			m_state.update(clientRawPos.asPoint(), clientPos, detail::GetScreenPos());
 		}
 		
 		if (m_requestedCursor != m_currentCursor)
@@ -203,6 +203,15 @@ namespace s3d
 		m_transformLocal = matrix;
 		m_transformAll = (m_transformLocal * m_transformCamera * m_transformScreen);
 		m_transformAllInv = m_transformAll.inverse();
+
+		// 変換が変わったら、現在のカーソル位置もその変換で計算し直す (WindowsDesktop 版と同じ)
+		m_state.vec2.previous	= m_transformAllInv.transformPoint(m_state.raw.previous);
+		m_state.vec2.current	= m_transformAllInv.transformPoint(m_state.raw.current);
+		m_state.vec2.delta		= (m_state.vec2.current - m_state.vec2.previous);
+
+		m_state.point.previous	= m_state.vec2.previous.asPoint();
+		m_state.point.current	= m_state.vec2.current.asPoint();
+		m_state.point.delta		= m_state.vec2.delta.asPoint();
 	}
 
 	void CCursor::setCameraTransform(const Mat3x2& matrix)
@@ -215,6 +224,15 @@ namespace s3d
 		m_transformCamera = matrix;
 		m_transformAll = (m_transformLocal * m_transformCamera * m_transformScreen);
 		m_transformAllInv = m_transformAll.inverse();
+
+		// 変換が変わったら、現在のカーソル位置もその変換で計算し直す (WindowsDesktop 版と同じ)
+		m_state.vec2.previous	= m_transformAllInv.transformPoint(m_state.raw.previous);
+		m_state.vec2.current	= m_transformAllInv.transformPoint(m_state.raw.current);
+		m_state.vec2.delta		= (m_state.vec2.current - m_state.vec2.previous);
+
+		m_state.point.previous	= m_state.vec2.previous.asPoint();
+		m_state.point.current	= m_state.vec2.current.asPoint();
+		m_state.point.delta		= m_state.vec2.delta.asPoint();
 	}
 
 	void CCursor::setScreenTransform(const Mat3x2& matrix)
@@ -227,6 +245,15 @@ namespace s3d
 		m_transformScreen = matrix;
 		m_transformAll = (m_transformLocal * m_transformCamera * m_transformScreen);
 		m_transformAllInv = m_transformAll.inverse();
+
+		// 変換が変わったら、現在のカーソル位置もその変換で計算し直す (WindowsDesktop 版と同じ)
+		m_state.vec2.previous	= m_transformAllInv.transformPoint(m_state.raw.previous);
+		m_state.vec2.current	= m_transformAllInv.transformPoint(m_state.raw.current);
+		m_state.vec2.delta		= (m_state.vec2.current - m_state.vec2.previous);
+
+		m_state.point.previous	= m_state.vec2.previous.asPoint();
+		m_state.point.current	= m_state.vec2.current.asPoint();
+		m_state.point.delta		= m_state.vec2.delta.asPoint();
 	}
 
 	bool CCursor::isClippedToWindow() const noexcept
