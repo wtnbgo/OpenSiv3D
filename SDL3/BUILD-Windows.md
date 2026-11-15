@@ -76,5 +76,5 @@ Siv3DApp.exe
 - ファイルダイアログ 4 種 (OpenFile / OpenFiles / SaveFile / SelectFolder) のタイトル・フィルタ・初期フォルダ・戻り値・キャンセル、ダイアログ表示中に終了要求を送ったときに空の結果で戻って正常終了すること
 - ゴミ箱への移動
 - `example/test.mp3` (MP3) と `example/midi/test.mid` (MIDI) の読み込みと再生、`example/video/river.mp4` を `VideoReader` で開いてフレームを取得できること
-- WebM (VP9 1080p 30fps、Opus 音声、DefaultDuration 無し) を `VideoReader` で開き、フレームレートの推定 (30.000)・フレームの取得・シークができること、`VideoTexture` で描画できること
+- WebM (VP9 1080p 30fps、音声付き、DefaultDuration 無し) を `VideoReader` で開き、フレームレートの推定 (30.000)・フレームの取得・シークができること、`VideoTexture` で描画できること
 - 同じ WebM を `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で音声付き再生し、再生位置が音声の時計に従って進むこと、`getAudio().pause()` で映像も止まること、`setPosSec()` でシークできること
