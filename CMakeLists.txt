@@ -1142,6 +1142,27 @@ if(SIV3D_BUILD_SAMPLE)
       DESTINATION .)
     # エンジン資材 (Resource() = exe のフォルダ/resources/) とサンプル資材 (カレント相対 example/)
     install(DIRECTORY Web/App/resources Web/App/example DESTINATION .)
+
+    # ffmpeg (opencv4 の VideoCapture が使う) は LGPL を守るため共有ライブラリにしている
+    # (cmake/vcpkg-triplets/x64-linux.cmake)。libav* / libsw* の .so を実行ファイルの隣に置き、
+    # exe の DT_RPATH ($ORIGIN) で解決させる
+    set(SIV3D_LINUX_VCPKG_LIBDIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+    file(GLOB SIV3D_LINUX_FFMPEG_LIBS
+      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavcodec.so.*"
+      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavformat.so.*"
+      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavutil.so.*"
+      "${SIV3D_LINUX_VCPKG_LIBDIR}/libswresample.so.*"
+      "${SIV3D_LINUX_VCPKG_LIBDIR}/libswscale.so.*"
+    )
+    if(SIV3D_LINUX_FFMPEG_LIBS)
+      # soname のリンク (libavcodec.so.61 → libavcodec.so.61.x.y) もそのまま置く
+      install(FILES ${SIV3D_LINUX_FFMPEG_LIBS} DESTINATION .)
+      foreach(lib IN LISTS SIV3D_LINUX_FFMPEG_LIBS)
+        add_custom_command(TARGET Siv3DApp POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different "${lib}" $<TARGET_FILE_DIR:Siv3DApp>
+        )
+      endforeach()
+    endif()
   endif()
   # エンジンリソース (GLES 用 essl シェーダ / フォント / サウンドフォント / テクスチャ) と
   # サンプル用 example を実行ファイルの隣にコピーする (全プラットフォーム共通)。

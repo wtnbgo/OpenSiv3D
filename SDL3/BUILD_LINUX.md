@@ -56,6 +56,8 @@ bin/x64-linux/Release/
   Siv3DApp                 実行ファイル (RPATH = $ORIGIN)
   libSDL3.so.0.x.y         同梱 SDL3
   libSDL3.so.0 -> libSDL3.so.0.x.y
+  libavcodec.so.61 / libavformat.so.61 / libavutil.so.59 / libswresample.so.5 / libswscale.so.8
+                           同梱 ffmpeg (LGPL、共有ライブラリ。soname のリンクと実体)
   resources/engine/        エンジン資材 (フォント / シェーダ (essl) / テクスチャ / サウンドフォント)
   example/                 サンプル資材
   lib/ include/            Siv3D 静的ライブラリと公開ヘッダ (アプリを別途ビルドする場合用)
@@ -91,8 +93,10 @@ readelf -d Siv3DApp | grep -E "NEEDED|RPATH|RUNPATH"
 nm Siv3DApp | grep -c " [Tt] _Unwind_RaiseException"     # 0
 objdump -T Siv3DApp | grep -o "GCC_[0-9.]*" | sort -Vu | tail -1   # GCC_4.2.0
 
-# 同梱 SDL3 も同じ基準
-objdump -T libSDL3.so.0 | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1
+# 同梱 SDL3 / ffmpeg も同じ基準。ffmpeg の .so は RPATH / RUNPATH を持たないこと
+for f in libSDL3.so.0 libav*.so.?? libsw*.so.?; do
+  echo "$f $(objdump -T $f | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1) $(readelf -d $f | grep -E "RPATH|RUNPATH")"
+done
 ```
 
 実測 (2026-11-15, sniper SDK + gcc-14, Release):
@@ -105,9 +109,13 @@ objdump -T libSDL3.so.0 | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1
 | RPATH | `$ORIGIN` (DT_RPATH) | - |
 | `_Unwind_RaiseException` の定義 | 0 | - |
 
-NEEDED: `libgcc_s.so.1 libpthread.so.0 libdl.so.2 libSDL3.so.0 libm.so.6 libc.so.6
-ld-linux-x86-64.so.2` (`libSDL3.so.0` 以外は glibc / libgcc のみ。ファイルダイアログとゴミ箱を
-置き換えた後の実測で、gtk / gdk / gio / gobject / glib は含まない)。
+同梱 ffmpeg (7.1.1): GLIBC 最大 2.29 (libavformat は 2.28)、GLIBCXX 依存なし、RPATH / RUNPATH なし。
+
+NEEDED: `libgcc_s.so.1 libpthread.so.0 libavformat.so.61 libavcodec.so.61 libswscale.so.8
+libavutil.so.59 libdl.so.2 libSDL3.so.0 libm.so.6 libc.so.6 ld-linux-x86-64.so.2`
+(同梱の SDL3 / ffmpeg 以外は glibc / libgcc のみ。gtk / gdk / gio / gobject / glib は含まない)。
+音声ライブラリ (libpulse / libasound / libjack / PipeWire) は miniaudio が実行時に dlopen するので
+NEEDED には出ない。
 
 ## Linux 固有の構成 (CMakeLists.txt)
 
@@ -132,11 +140,27 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
 - **vcpkg.json**: Linux では opencv4 の default-features を切る。既定のままだと
   gtk / highgui 経由で gtk3・cairo・fontconfig 一式を vcpkg でビルドしようとし、
   sniper SDK では gperf のビルドで失敗する。glib も Linux では vcpkg から外す
+- **動画 (VideoReader / VideoTexture) は opencv4 + ffmpeg**: Linux の opencv4 に `ffmpeg` feature を
+  付け、ffmpeg は `avcodec / avformat / swresample / swscale` だけ (default-features なし。
+  avdevice / avfilter は作らない) をビルドする。gpl / nonfree / version3 feature は使わないので
+  **LGPL 2.1 以降**。H.264 / AAC なども ffmpeg 内蔵のデコーダーで再生できる
+- **ffmpeg だけ共有ライブラリ** (overlay triplet `cmake/vcpkg-triplets/x64-linux.cmake`、プリセット
+  `x64-linux` の `VCPKG_OVERLAY_TRIPLETS`): LGPL の再リンク要件を満たすため静的リンクしない。
+  libav* / libsw* の .so を実行ファイルの隣に同梱し、exe の DT_RPATH (`$ORIGIN`) で解決する。
+  ffmpeg の .so には vcpkg が既定で付ける RUNPATH を付けない (`VCPKG_FIXUP_ELF_RPATH OFF`):
+  RUNPATH があると .so 同士の依存 (libavcodec → libswresample 等) に exe の DT_RPATH が使われず、
+  Steam 起動時の `LD_LIBRARY_PATH` にある SteamOS 側の同じ soname の ffmpeg が読まれうるため。
+  `LD_LIBRARY_PATH` に同じ soname の偽物を置いても、5 本とも同梱版が読まれることを確認済み
+- **ffmpeg のビルド**: x86 の asm に nasm を使う (steamdev のイメージに入っている)。所要時間は
+  ffmpeg 約 4 分 + opencv4 の再ビルド約 6 分 (overlay triplet の導入で triplet の ABI が変わるため、
+  初回はバイナリキャッシュに無い依存も作り直しになる。全体で約 20 分)
 
 ## 既知の制限・注意点
 
-- **VideoReader は動画ファイル非対応**: Linux の opencv4 は ffmpeg 無しでビルドしているため、
-  `VideoReader` / `VideoTexture` で動画ファイルを開けない (Webcam は v4l2 で使える)
+- **ffmpeg (LGPL) の配布条件**: アプリを配布するときは、ffmpeg のライセンス文
+  (`build/x64-linux/vcpkg_installed/x64-linux/share/ffmpeg/copyright`) を同梱し、使った ffmpeg の
+  ソース (vcpkg の port とバージョン、7.1.1) を入手できるようにすること。.so を差し替えて動かせる
+  形 (共有ライブラリ) にしてあるので、再リンクの要件はこれで満たせる
 - **画面がスリープ中 (スクリーンセーバー動作中) の X11 では起動直後に止まる**:
   コンポジタがフレームを表示しないため、垂直同期付きの `SwapBuffers`
   (`X11_GL_SwapWindow` → Mesa DRI3) が返らない。Wayland では SDL3 がフレーム待ちに
@@ -167,3 +191,9 @@ zenity は自プロセスの子だけを SIGKILL で閉じる。zenity は SIGTE
 ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) はホームのゴミ箱
 (`~/.local/share/Trash/files` と `info/*.trashinfo`) に入り、`gio trash --list` に表示され、
 `gio trash --restore` (GNOME の「ゴミ箱」と同じ GVfs) で元に戻せることを確認した。
+
+音声は miniaudio が選ばれる (ログに `🎧 Audio backend: MiniAudio`)。PipeWire (pipewire-pulse) 環境で
+libpulse が実行時に読み込まれ、MP3 (`example/test.mp3`, 103.42 秒) と MIDI (`example/midi/test.mid`,
+205.70 秒) が読めて、再生位置が進む (2 秒後に posSec 2.0) ことを確認した。
+動画は `example/video/river.mp4` が開け (1280x720, 29.97fps, 752 フレーム)、`readFrame` で
+1280x720 の画像が得られることを確認した (Windows と同じ結果)。
