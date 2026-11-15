@@ -18,6 +18,8 @@
 # include <Siv3D/FileSystem.hpp>
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/Window/IWindow.hpp>
+# include <Siv3D/UserAction.hpp>
+# include <Siv3D/UserAction/IUserAction.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 
 //
@@ -30,6 +32,38 @@
 
 namespace s3d
 {
+# if SIV3D_PLATFORM(MACOS)
+
+	// SivDialog_SDL3_macOS.mm
+	void MacOS_BeginFileDialog();
+	void MacOS_EndFileDialog();
+	void MacOS_CancelFileDialogs();
+
+	namespace
+	{
+		// 終了要求 (SDL_EVENT_QUIT) を受け取ったか。
+		// Siv3D は QUIT を処理したフレームの System::Update ではまだ true を返す (終了するのは次の Update) ため、
+		// その間に開かれたダイアログは表示せずにキャンセル扱いで返す
+		// (QUIT はすでにキューから取り出されているので、表示すると終了要求を検出できず固まる)。
+		bool g_quitRequested = false;
+
+		[[nodiscard]]
+		bool HasQuitEvent()
+		{
+			SDL_Event event;
+			return (SDL_PeepEvents(&event, 1, SDL_PEEKEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT) > 0);
+		}
+
+		// 終了要求でアプリが終了する設定か (System::SetTerminationTriggers で外されていれば終了しないので、以降のダイアログは止めない)
+		[[nodiscard]]
+		bool QuitTerminatesApp()
+		{
+			return ((SIV3D_ENGINE(UserAction)->getTerminationTriggers() & UserAction::CloseButtonClicked) != 0);
+		}
+	}
+
+# endif
+
 	namespace
 	{
 		struct DialogResult
@@ -151,13 +185,47 @@ namespace s3d
 
 			DialogResult result;
 
+		# if SIV3D_PLATFORM(MACOS)
+			if (g_quitRequested || (QuitTerminatesApp() && HasQuitEvent()))
+			{
+				g_quitRequested = true;
+				SDL_DestroyProperties(props);
+				LOG_INFO(U"File dialog: skipped (quit requested)");
+				return{};
+			}
+
+			// ダイアログ表示中だけ Edit メニューを追加する (パネル内で ⌘A / ⌘C / ⌘V 等を効かせるため)
+			MacOS_BeginFileDialog();
+		# endif
+
 			SDL_ShowFileDialogWithProperties(type, OnDialogResult, &result, props);
+
+		# if SIV3D_PLATFORM(MACOS)
+			bool cancelRequested = false;
+		# endif
 
 			while (not result.done.load(std::memory_order_acquire))
 			{
 				SDL_PumpEvents();
+
+			# if SIV3D_PLATFORM(MACOS)
+				// 終了要求 (SIGTERM / ⌘Q など) が来たらダイアログをキャンセルして戻る。
+				// SDL_EVENT_QUIT はキューから取り出さずに残し、Siv3D のメインループ (System::Update) で通常どおり処理させる。
+				if ((not cancelRequested) && HasQuitEvent())
+				{
+					LOG_INFO(U"File dialog: cancelled by quit request");
+					MacOS_CancelFileDialogs();
+					cancelRequested = true;
+					g_quitRequested = QuitTerminatesApp();
+				}
+			# endif
+
 				SDL_Delay(10);
 			}
+
+		# if SIV3D_PLATFORM(MACOS)
+			MacOS_EndFileDialog();
+		# endif
 
 			SDL_DestroyProperties(props);
 

@@ -186,11 +186,15 @@ set(SIV3D_SDL3_SOURCES
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/XInput/XInputFactory.cpp
 )
 
-# macOS: ゴミ箱は NSFileManager (Objective-C++)
+# macOS: ゴミ箱は NSFileManager、ファイルダイアログ補助 (Objective-C++)
 if(APPLE)
   list(APPEND SIV3D_SDL3_SOURCES
     Siv3D/src/Siv3D-Platform/SDL3/Siv3D/FileSystem/SivFileSystem_SDL3_macOS.mm
+    Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Dialog/SivDialog_SDL3_macOS.mm
   )
+  # ファイルダイアログ補助 (Edit メニュー / 終了要求でのキャンセル) は ARC 前提
+  set_source_files_properties(Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Dialog/SivDialog_SDL3_macOS.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 
 set(SIV3D_INTERNAL_SOURCES
