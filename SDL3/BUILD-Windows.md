@@ -78,3 +78,4 @@ Siv3DApp.exe
 - `example/test.mp3` (MP3) と `example/midi/test.mid` (MIDI) の読み込みと再生、`example/video/river.mp4` を `VideoReader` で開いてフレームを取得できること
 - WebM (VP9 1080p 30fps、音声付き、DefaultDuration 無し) を `VideoReader` で開き、フレームレートの推定 (30.000)・フレームの取得・シークができること、`VideoTexture` で描画できること
 - 同じ WebM を `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で音声付き再生し、再生位置が音声の時計に従って進むこと、`getAudio().pause()` で映像も止まること、`setPosSec()` でシークできること
+- 音声が Vorbis (2ch)・Opus (2ch)・Opus (1ch) の WebM で、トラック構成の判定 (ログ) と音声付き再生ができること。3 本とも実際に音が聞こえ、映像と音声がずれていないことを耳で確認
