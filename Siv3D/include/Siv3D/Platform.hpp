@@ -22,6 +22,7 @@
 # define SIV3D_PLATFORM_PRIVATE_DEFINITION_MACOS()		0
 # define SIV3D_PLATFORM_PRIVATE_DEFINITION_LINUX()		0
 # define SIV3D_PLATFORM_PRIVATE_DEFINITION_WEB()		0
+# define SIV3D_PLATFORM_PRIVATE_DEFINITION_IOS()		0
 
 # if defined(_WIN32) // Windows
 
@@ -29,11 +30,22 @@
 	# undef	 SIV3D_PLATFORM_PRIVATE_DEFINITION_WINDOWS
 	# define SIV3D_PLATFORM_PRIVATE_DEFINITION_WINDOWS()	1
 
-# elif defined(__APPLE__) && defined(__MACH__) // macOS
+# elif defined(__APPLE__) && defined(__MACH__) // macOS / iOS
 
-	# define SIV3D_PLATFORM_NAME	U"macOS"
+	# include <TargetConditionals.h>
+
+	// SIV3D_PLATFORM(MACOS) は Apple 系 (macOS / iOS) 共通のコードで使う。
+	// iOS では SIV3D_PLATFORM(IOS) も 1 になる (AppKit など macOS 専用の機能を外すときに使う)
 	# undef  SIV3D_PLATFORM_PRIVATE_DEFINITION_MACOS
 	# define SIV3D_PLATFORM_PRIVATE_DEFINITION_MACOS()		1
+
+	# if TARGET_OS_IPHONE
+		# define SIV3D_PLATFORM_NAME	U"iOS"
+		# undef  SIV3D_PLATFORM_PRIVATE_DEFINITION_IOS
+		# define SIV3D_PLATFORM_PRIVATE_DEFINITION_IOS()		1
+	# else
+		# define SIV3D_PLATFORM_NAME	U"macOS"
+	# endif
 
 # elif defined(__linux__) // Linux
 
@@ -74,8 +86,9 @@
 
 # elif SIV3D_PLATFORM(MACOS)
 
-	// x86_64 のみ。arm64 (Apple Silicon) では simde 経路 (SSE 命令を NEON 等に変換) を使う
-	# if defined(__x86_64__)
+	// x86_64 (SSE4.1 以上) のみ。macOS の x86_64 は既定で SSE4.1 が有効 (iOS シミュレータは CMake で -msse4.1 を付ける)。
+	// arm64 (Apple Silicon / iOS) では simde 経路 (SSE 命令を NEON 等に変換) を使う
+	# if defined(__x86_64__) && defined(__SSE4_1__)
 		# undef  SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE
 		# define SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE()	1
 	# endif
