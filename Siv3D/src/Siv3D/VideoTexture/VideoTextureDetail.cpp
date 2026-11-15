@@ -13,6 +13,13 @@
 # include <Siv3D/EngineLog.hpp>
 # if defined(SIV3D_WITH_MOVIEPLAYER)
 #	include "WebMPlayer.hpp"
+# else
+namespace s3d
+{
+	// movie-player を使わないビルド (SIV3D_WITH_MOVIEPLAYER=OFF) では m_player は常に空。
+	// std::unique_ptr<WebMPlayer> のデストラクタに完全型が要るので、空の定義を置く
+	class WebMPlayer {};
+}
 # endif
 
 namespace s3d
