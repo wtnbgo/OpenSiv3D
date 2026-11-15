@@ -20,6 +20,11 @@ else()
   set(_siv3d_movieplayer_default ON)
 endif()
 option(SIV3D_WITH_MOVIEPLAYER "Play WebM videos with movie-player (libvpx)" ${_siv3d_movieplayer_default})
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND SIV3D_WITH_MOVIEPLAYER)
+  # アプリ側の設定 (siv3d-app.json の共通 cmake.options など) で ON にされても、iOS では使えないので OFF にする
+  message(WARNING "SIV3D_WITH_MOVIEPLAYER is not supported on iOS yet (libvpx); disabled")
+  set(SIV3D_WITH_MOVIEPLAYER OFF CACHE BOOL "Play WebM videos with movie-player (libvpx)" FORCE)
+endif()
 # Linux: opencv4 に FFmpeg (LGPL、共有ライブラリで同梱) を組み込み、MP4 などを VideoReader で開けるようにする。
 # OFF にすると FFmpeg を一切含まない (Linux で開ける動画は WebM だけになる)。Windows / macOS は OS の機能を使うので影響しない
 option(SIV3D_WITH_FFMPEG "Linux: build opencv4 with FFmpeg (LGPL, bundled as shared libraries)" ON)
