@@ -170,7 +170,15 @@ def configure(app, env):
 
 
 def build(app, env):
-    if not (app.cmake_dir / "CMakeCache.txt").exists():
+    # configure が途中で失敗・中断したビルドツリー (CMakeCache.txt はあるが build.ninja が無い) は、
+    # CMakeCache.txt だけ見るとビルドに失敗し続ける。そのまま configure し直しても、vcpkg が依存の
+    # インストール済みと判断して飛ばす (find_package の結果もキャッシュに残る) ので、キャッシュを消してやり直す
+    if not (app.cmake_dir / "build.ninja").exists():
+        cache = app.cmake_dir / "CMakeCache.txt"
+        if cache.exists():
+            log("incomplete build tree (no build.ninja): removing CMakeCache.txt and reconfiguring")
+            cache.unlink()
+            shutil.rmtree(app.cmake_dir / "CMakeFiles", ignore_errors=True)
         configure(app, env)
     run(["cmake", "--build", app.cmake_dir, "--config", app.config], env=env)
 
@@ -301,12 +309,16 @@ def run_in_container(app, args, commands):
            "-e", "CC=gcc-14", "-e", "CXX=g++-14",
            "-w", "/app",
            image, "bash", "-c", inner]
-    run(cmd)
-
-    # コンテナは root で動くので、Linux ホストではビルド結果の所有者を戻す
-    if platform.system() == "Linux" and hasattr(os, "getuid"):
-        run([engine, "run", "--rm", "-v", f"{app.build_dir}:/out", image,
-             "chown", "-R", f"{os.getuid()}:{os.getgid()}", "/out"])
+    try:
+        run(cmd)
+    finally:
+        # コンテナは root で動くので、Linux ホストではビルド結果の所有者を戻す
+        # (ビルドに失敗したときも戻さないと、ホストから clean できなくなる)
+        # <project>/build もコンテナが作るので、build/<target> だけでなく build ごと戻す
+        out_dir = app.build_dir.parent
+        if platform.system() == "Linux" and hasattr(os, "getuid") and out_dir.exists():
+            subprocess.run([engine, "run", "--rm", "-v", f"{out_dir}:/out", image,
+                            "chown", "-R", f"{os.getuid()}:{os.getgid()}", "/out"])
 
 
 # -----------------------------------------------------------------------------
