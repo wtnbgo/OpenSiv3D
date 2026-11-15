@@ -12,9 +12,83 @@
 # include "VideoReaderDetail.hpp"
 # include <Siv3D/FileSystem.hpp>
 # include <Siv3D/EngineLog.hpp>
+# include <Siv3D/OpenCV_Bridge.hpp>
 
 namespace s3d
 {
+	namespace
+	{
+		// OpenCV の VideoCapture による読み出し元 (MP4 など。OS の機能 / FFmpeg でデコードする)
+		class OpenCVVideoSource final : public IVideoSource
+		{
+		public:
+
+			~OpenCVVideoSource() override
+			{
+				m_capture.release();
+			}
+
+			[[nodiscard]]
+			bool open(const FilePathView path)
+			{
+				if (not m_capture.open(path.narrow(), cv::CAP_ANY))
+				{
+					return false;
+				}
+
+				m_info.resolution	= Size{ static_cast<int32>(m_capture.get(cv::CAP_PROP_FRAME_WIDTH)), static_cast<int32>(m_capture.get(cv::CAP_PROP_FRAME_HEIGHT)) };
+				m_info.fps			= m_capture.get(cv::CAP_PROP_FPS);
+				m_info.frameCount	= static_cast<size_t>(static_cast<int32>(m_capture.get(cv::CAP_PROP_FRAME_COUNT)));
+
+				return true;
+			}
+
+			[[nodiscard]]
+			const Info& info() const noexcept override
+			{
+				return m_info;
+			}
+
+			[[nodiscard]]
+			bool readFrame(Image& image) override
+			{
+				if (not m_capture.grab())
+				{
+					return false;
+				}
+
+				m_capture.retrieve(m_mat);
+				OpenCV_Bridge::FromMatVec3b(m_mat, image, OverwriteAlpha::Yes);
+				return true;
+			}
+
+			void seekFrame(const int32 frameIndex) override
+			{
+				m_capture.set(cv::CAP_PROP_POS_FRAMES, frameIndex);
+			}
+
+		private:
+
+			cv::VideoCapture m_capture;
+
+			cv::Mat m_mat;
+
+			Info m_info;
+		};
+	}
+
+	std::unique_ptr<IVideoSource> CreateOpenCVVideoSource(const FilePathView path)
+	{
+		auto source = std::make_unique<OpenCVVideoSource>();
+
+		if (not source->open(path))
+		{
+			return nullptr;
+		}
+
+		return source;
+	}
+
 	VideoReader::VideoReaderDetail::VideoReaderDetail() {}
 
 	VideoReader::VideoReaderDetail::~VideoReaderDetail()
@@ -28,25 +102,30 @@ namespace s3d
 
 		close();
 
-		const bool result = m_shared.capture.open(path.narrow(), cv::CAP_ANY);
+		// WebM は movie-player、それ以外 (と movie-player で開けなかった場合) は OpenCV で開く
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		m_shared.source = CreateWebMVideoSource(path);
+	# endif
 
-		if (not result)
+		if (not m_shared.source)
+		{
+			m_shared.source = CreateOpenCVVideoSource(path);
+		}
+
+		if (not m_shared.source)
 		{
 			return false;
 		}
 
-		const int32 videoWidth	= static_cast<int32>(m_shared.capture.get(cv::CAP_PROP_FRAME_WIDTH));
-		const int32 videoHeight	= static_cast<int32>(m_shared.capture.get(cv::CAP_PROP_FRAME_HEIGHT));
-		const int32 frameCount	= static_cast<int32>(m_shared.capture.get(cv::CAP_PROP_FRAME_COUNT));
-		const double videoFPS	= m_shared.capture.get(cv::CAP_PROP_FPS);
+		const IVideoSource::Info& info = m_shared.source->info();
 
 		m_info =
 		{
 			.fullPath	= FileSystem::FullPath(path),
-			.resolution	= Size{ videoWidth, videoHeight },
-			.fps		= videoFPS,
+			.resolution	= info.resolution,
+			.fps		= info.fps,
 			.readPos	= 0,
-			.frameCount	= static_cast<size_t>(frameCount),
+			.frameCount	= info.frameCount,
 			.isOpen		= true,
 		};
 
@@ -76,7 +155,7 @@ namespace s3d
 			m_task.get();
 		}
 
-		m_shared.capture.release();
+		m_shared.source.reset();
 		m_shared = {};
 		m_info = {};
 	}
@@ -89,10 +168,8 @@ namespace s3d
 
 			if (not m_shared.reachedEnd)
 			{
-				if (m_shared.capture.grab())
+				if (m_shared.source->readFrame(m_shared.frame.image))
 				{
-					m_shared.capture.retrieve(m_shared.frame.mat);
-					OpenCV_Bridge::FromMatVec3b(m_shared.frame.mat, m_shared.frame.image, OverwriteAlpha::Yes);
 					m_shared.frame.index = m_shared.readPos++;
 					//LOG_TEST(U"## info ## retrieved frame {} to buffer"_fmt(m_shared.frame.index));
 				}
@@ -160,7 +237,7 @@ namespace s3d
 				//LOG_TEST(U"## info ## getFrmae(): targetBufferIndex {} not found in buffer"_fmt(m_info.readPos));
 
 				m_shared.readPos = m_info.readPos;
-				m_shared.capture.set(cv::CAP_PROP_POS_FRAMES, m_shared.readPos);
+				m_shared.source->seekFrame(m_shared.readPos);
 				m_shared.reachedEnd = false;
 				m_shared.ready = false;
 				//LOG_TEST(U"## info ## m_shared.ready = false;");

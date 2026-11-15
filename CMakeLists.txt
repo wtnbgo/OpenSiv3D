@@ -8,6 +8,21 @@ add_compile_definitions("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CX
 # force output PDB
 add_link_options("$<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/DEBUG>")
 
+# ---------------------------------------------
+# 動画のオプション (vcpkg の manifest feature と連動するので project() より前で決める)
+# ---------------------------------------------
+# WebM (VP8 / VP9 + Vorbis / Opus) を movie-player (https://github.com/wamsoft/movie-player) で再生する
+option(SIV3D_WITH_MOVIEPLAYER "Play WebM videos with movie-player (libvpx)" ON)
+# Linux: opencv4 に FFmpeg (LGPL、共有ライブラリで同梱) を組み込み、MP4 などを VideoReader で開けるようにする。
+# OFF にすると FFmpeg を一切含まない (Linux で開ける動画は WebM だけになる)。Windows / macOS は OS の機能を使うので影響しない
+option(SIV3D_WITH_FFMPEG "Linux: build opencv4 with FFmpeg (LGPL, bundled as shared libraries)" ON)
+if(SIV3D_WITH_MOVIEPLAYER)
+  list(APPEND VCPKG_MANIFEST_FEATURES "movieplayer")
+endif()
+if(SIV3D_WITH_FFMPEG)
+  list(APPEND VCPKG_MANIFEST_FEATURES "ffmpeg")
+endif()
+
 project(OpenSiv3D
     VERSION 0.6.16
     HOMEPAGE_URL "https://github.com/Siv3D/OpenSiv3D"
@@ -56,6 +71,69 @@ FetchContent_Declare(
 set(SDL_SHARED ON CACHE BOOL "Build SDL shared library")
 set(SDL_STATIC OFF CACHE BOOL "Build SDL static library")
 FetchContent_MakeAvailable(SDL3)
+
+# ---------------------------------------------
+# movie-player (WebM 再生)
+# ---------------------------------------------
+# 上流の CMakeLists.txt は使わず (ソースを取得するだけ)、Siv3D の ThirdParty と同様に
+# OBJECT ライブラリとして Siv3D に取り込む。VideoReader の WebM 経路は内部のデマルチプレクサ
+# (WebmExtractor) とデコーダ (VpxDecoder) を同期的に使うため、src/ 以下のヘッダも参照する
+if(SIV3D_WITH_MOVIEPLAYER)
+  FetchContent_Declare(
+    movieplayer
+    GIT_REPOSITORY https://github.com/wamsoft/movie-player.git
+    GIT_TAG b01a5f64452c00bc4b2ac700101955fe4dd55150
+    SOURCE_SUBDIR _siv3d_no_cmake
+  )
+  FetchContent_MakeAvailable(movieplayer)
+
+  find_package(unofficial-libvpx CONFIG REQUIRED)
+  find_package(Ogg CONFIG REQUIRED)
+
+  set(SIV3D_MOVIEPLAYER_INCLUDE_DIRS
+    "${movieplayer_SOURCE_DIR}/include"
+    "${movieplayer_SOURCE_DIR}/src/common"
+    "${movieplayer_SOURCE_DIR}/src/windows"
+    "${movieplayer_SOURCE_DIR}/extlibs/nestegg/include"
+    "${movieplayer_SOURCE_DIR}/extlibs/libyuv/include"
+  )
+
+  # libyuv: Windows x64 は上流同梱の clang ビルド済みライブラリ (SIMD 有効、静的 CRT) を使う
+  # (MSVC でビルドすると SIMD が無効になり色変換が遅い)。他は vcpkg の libyuv
+  if(WIN32)
+    set(SIV3D_MOVIEPLAYER_YUV
+      "$<IF:$<CONFIG:Debug>,${movieplayer_SOURCE_DIR}/extlibs/prebuild/win64/yuv_debug.lib,${movieplayer_SOURCE_DIR}/extlibs/prebuild/win64/yuv_release.lib>")
+  else()
+    find_package(libyuv CONFIG REQUIRED)
+    set(SIV3D_MOVIEPLAYER_YUV yuv)
+  endif()
+
+  add_library(Siv3D_ThirdParty_movieplayer OBJECT
+    "${movieplayer_SOURCE_DIR}/src/common/MessageLooper.cpp"
+    "${movieplayer_SOURCE_DIR}/src/common/PixelConvert.cpp"
+    "${movieplayer_SOURCE_DIR}/src/common/MediaClock.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/Decoder.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/VpxDecoder.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/VorbisDecoder.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/OpusDecoder.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/WebmExtractor.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/MkvFileReader.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/MkvStreamReader.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/MoviePlayerCore.cpp"
+    "${movieplayer_SOURCE_DIR}/src/windows/MoviePlayer.cpp"
+    "${movieplayer_SOURCE_DIR}/extlibs/nestegg/src/nestegg.c"
+  )
+  target_include_directories(Siv3D_ThirdParty_movieplayer PRIVATE ${SIV3D_MOVIEPLAYER_INCLUDE_DIRS})
+  target_link_libraries(Siv3D_ThirdParty_movieplayer PRIVATE
+    unofficial::libvpx::libvpx Ogg::ogg Vorbis::vorbis Opus::opus
+    $<$<NOT:$<PLATFORM_ID:Windows>>:yuv>
+  )
+  target_compile_features(Siv3D_ThirdParty_movieplayer PRIVATE cxx_std_17)
+  target_compile_options(Siv3D_ThirdParty_movieplayer PRIVATE
+    $<$<C_COMPILER_ID:MSVC>:/wd4244 /wd4267>
+  )
+  set_target_properties(Siv3D_ThirdParty_movieplayer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 
 
@@ -960,6 +1038,21 @@ target_link_libraries(Siv3D
 PUBLIC
   SDL3::SDL3
 )
+if(SIV3D_WITH_MOVIEPLAYER)
+  target_sources(Siv3D PRIVATE
+    $<TARGET_OBJECTS:Siv3D_ThirdParty_movieplayer>
+    Siv3D/src/Siv3D/VideoReader/WebMVideoSource.cpp
+  )
+  target_compile_definitions(Siv3D PRIVATE SIV3D_WITH_MOVIEPLAYER)
+  # movie-player の内部ヘッダは WebM 経路のソースだけが参照する
+  set_source_files_properties(Siv3D/src/Siv3D/VideoReader/WebMVideoSource.cpp
+    PROPERTIES INCLUDE_DIRECTORIES "${SIV3D_MOVIEPLAYER_INCLUDE_DIRS}")
+  target_link_libraries(Siv3D INTERFACE
+    unofficial::libvpx::libvpx
+    Ogg::ogg
+    ${SIV3D_MOVIEPLAYER_YUV}
+  )
+endif()
 if(UNIX AND NOT APPLE)
   # stduuid (UUIDValue::Generate) は Linux では libuuid の uuid_generate を使う。
   # 実行時の依存を増やさないよう静的ライブラリを優先する

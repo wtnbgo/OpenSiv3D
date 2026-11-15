@@ -1,6 +1,6 @@
 {
   "name": "opensiv3d",
-  "version-string": "0.6.16",  
+  "version-string": "0.6.16",
   "dependencies": [
     "boost-algorithm",
     "boost-asio",
@@ -47,19 +47,7 @@
         "webp",
         "tiff",
         "quirc",
-        "thread",
-        "ffmpeg"
-      ],
-      "platform": "linux"
-    },
-    {
-      "name": "ffmpeg",
-      "default-features": false,
-      "features": [
-        "avcodec",
-        "avformat",
-        "swresample",
-        "swscale"
+        "thread"
       ],
       "platform": "linux"
     },
@@ -80,5 +68,42 @@
       "platform": "osx"
     }
   ],
+  "features": {
+    "ffmpeg": {
+      "description": "Linux: VideoReader / VideoTexture で MP4 などを開くために opencv4 に FFmpeg (LGPL、共有ライブラリで同梱) を組み込む",
+      "dependencies": [
+        {
+          "name": "opencv4",
+          "default-features": false,
+          "features": [
+            "ffmpeg"
+          ],
+          "platform": "linux"
+        },
+        {
+          "name": "ffmpeg",
+          "default-features": false,
+          "features": [
+            "avcodec",
+            "avformat",
+            "swresample",
+            "swscale"
+          ],
+          "platform": "linux"
+        }
+      ]
+    },
+    "movieplayer": {
+      "description": "WebM (VP8 / VP9 + Vorbis / Opus) を movie-player で再生する",
+      "dependencies": [
+        "libvpx",
+        "libogg",
+        {
+          "name": "libyuv",
+          "platform": "!windows"
+        }
+      ]
+    }
+  },
   "builtin-baseline": "bc38a15b0bee8bc48a49ea267cc32fbb49aedfc4"
 }

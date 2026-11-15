@@ -12,15 +12,13 @@
 # pragma once
 # include <Siv3D/AsyncTask.hpp>
 # include <Siv3D/VideoReader.hpp>
-# include <Siv3D/OpenCV_Bridge.hpp>
+# include "VideoSource.hpp"
 
 namespace s3d
 {
-	struct MatFrame
+	struct VideoFrame
 	{
 		int32 index = -1;
-
-		cv::Mat mat;
 
 		Image image;
 	};
@@ -39,7 +37,7 @@ namespace s3d
 		// m_mutex で管理するデータ
 		struct Shared
 		{
-			cv::VideoCapture capture;
+			std::unique_ptr<IVideoSource> source;
 
 			int32 readPos = 0;
 
@@ -47,7 +45,7 @@ namespace s3d
 
 			bool stop = false;
 
-			MatFrame frame;
+			VideoFrame frame;
 
 			bool ready = false;
 
