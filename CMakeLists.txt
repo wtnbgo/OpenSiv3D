@@ -82,7 +82,7 @@ if(SIV3D_WITH_MOVIEPLAYER)
   FetchContent_Declare(
     movieplayer
     GIT_REPOSITORY https://github.com/wamsoft/movie-player.git
-    GIT_TAG b01a5f64452c00bc4b2ac700101955fe4dd55150
+    GIT_TAG ba267f3fa2dd6f594f89b016ef13e2713fa97a9b
     SOURCE_SUBDIR _siv3d_no_cmake
   )
   FetchContent_MakeAvailable(movieplayer)
