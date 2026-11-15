@@ -12,12 +12,23 @@
 # include <cstring>
 # include <Siv3D/CPUInfo.hpp>
 # include <Siv3D/Unicode.hpp>
-# include <ThirdParty/cpu_features/cpuinfo_x86.h>
+
+# if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+#	define SIV3D_CPU_X86 1
+#	include <ThirdParty/cpu_features/cpuinfo_x86.h>
+# else
+#	define SIV3D_CPU_X86 0
+#	if defined(__APPLE__)
+#		include <sys/sysctl.h>
+#	endif
+# endif
 
 namespace s3d
 {
 	namespace detail
 	{
+	# if SIV3D_CPU_X86
+
 		[[nodiscard]]
 		static CPUInfo InitCPUInfo() noexcept
 		{
@@ -38,6 +49,38 @@ namespace s3d
 
 			return result;
 		}
+
+	# else
+
+		// x86 以外 (arm64 など): X86Features はすべて 0。vendor / brand は取れる範囲で設定する
+		[[nodiscard]]
+		static CPUInfo InitCPUInfo() noexcept
+		{
+			CPUInfo result;
+			std::memset(&result.features, 0, sizeof(result.features));
+			result.family	= 0;
+			result.model	= 0;
+			result.stepping	= 0;
+
+		# if defined(__APPLE__)
+			{
+				char brand[256] = {};
+				size_t size = sizeof(brand);
+
+				if (::sysctlbyname("machdep.cpu.brand_string", brand, &size, nullptr, 0) == 0)
+				{
+					result.brand = Unicode::Widen(brand);
+				}
+			}
+			result.vendor = U"Apple";
+		# elif defined(__aarch64__) || defined(__arm__)
+			result.vendor = U"ARM";
+		# endif
+
+			return result;
+		}
+
+	# endif
 	}
 
 	const CPUInfo g_CPUInfo = detail::InitCPUInfo();

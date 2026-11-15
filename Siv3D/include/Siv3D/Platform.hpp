@@ -74,8 +74,11 @@
 
 # elif SIV3D_PLATFORM(MACOS)
 
-	# undef  SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE
-	# define SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE()	1
+	// x86_64 のみ。arm64 (Apple Silicon) では simde 経路 (SSE 命令を NEON 等に変換) を使う
+	# if defined(__x86_64__)
+		# undef  SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE
+		# define SIV3D_INTRINSIC_PRIVATE_DEFINITION_SSE()	1
+	# endif
 
 # elif SIV3D_PLATFORM(LINUX)
 

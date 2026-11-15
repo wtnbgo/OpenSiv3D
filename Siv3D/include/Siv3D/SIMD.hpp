@@ -23,10 +23,28 @@
 # include <ThirdParty/simde/x86/sse4.1.h>
 # include <ThirdParty/simde/x86/sse4.2.h>
 
+# if defined(__APPLE__)
+
+// macOS / iOS には <malloc.h> と memalign が無いので posix_memalign を使う
+# include <cstdlib>
+
+inline void* Siv3D_SIMD_AlignedMalloc(const size_t size, const size_t alignment) noexcept
+{
+	void* p = nullptr;
+	return (::posix_memalign(&p, ((alignment < sizeof(void*)) ? sizeof(void*) : alignment), size) == 0) ? p : nullptr;
+}
+
+# define _mm_malloc(__size, __align) Siv3D_SIMD_AlignedMalloc((__size), (__align))
+# define _mm_free free
+
+# else
+
 # include <malloc.h>    // For memalign
 
 # define _mm_malloc(__size, __align) memalign((__align), (__size))
 # define _mm_free free
+
+# endif
 
 # else
 

@@ -14,8 +14,22 @@
 
 
 #include "infoware/detail/cpuid.hpp"
-#include <cpuid.h>
 #include <cstdint>
+
+// [Siv3D] cpuid / xgetbv は x86 専用。それ以外 (arm64 など) では x86 の機能なし (すべて 0) として返す
+#if !(defined(__x86_64__) || defined(__i386__))
+
+void iware::detail::cpuid(std::int32_t (&out)[4], std::int32_t) {
+	out[0] = out[1] = out[2] = out[3] = 0;
+}
+
+std::uint64_t iware::detail::xgetbv(std::uint32_t) {
+	return 0;
+}
+
+#else
+
+#include <cpuid.h>
 
 
 void iware::detail::cpuid(std::int32_t (&out)[4], std::int32_t x) {
@@ -27,6 +41,8 @@ std::uint64_t iware::detail::xgetbv(std::uint32_t index) {
 	__asm__ __volatile__("xgetbv" : "=a"(eax), "=d"(edx) : "c"(index));
 	return ((uint64_t)edx << 32) | eax;
 }
+
+#endif
 
 
 #endif
