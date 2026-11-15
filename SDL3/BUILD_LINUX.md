@@ -168,9 +168,11 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
   (吉里吉里Z でも、画面スリープ中の Wayland 起動で SDL3 初期化が落ちる事例がある)
 - ビルド後に `resources/` と `example/` が実行ファイルの隣 (`SDL3/App/Release/`) にも
   コピーされるので、ビルドツリーでも起動できる (`SDL3/App/Release` に移動してから起動)
-- ゴミ箱: ホームと別のファイルシステムでは `<マウントポイント>/.Trash-<uid>` に入れる。
-  tmpfs の `/tmp` などシステム内部のマウントでも移動はするが、GNOME のゴミ箱 (GVfs) には
-  表示されない (GIO の `g_file_trash` はこの場合ゴミ箱への移動自体を失敗として返す)
+- ゴミ箱: ホームと別のファイルシステム (USB メモリ・SD カードなど) では `<マウントポイント>/.Trash-<uid>` に入れる。
+  ただし tmpfs の `/tmp`・`/dev/shm` などシステム内部のマウントでは、GIO の `g_file_trash` と同じく
+  ゴミ箱に移さず `false` を返す (ファイルは残る)。そこに入れても GNOME などのゴミ箱 (GVfs) には
+  表示されず元に戻せない (tmpfs なら再起動で消える) ため。判定は `/proc/self/mountinfo` の
+  ファイルシステム種別 (tmpfs / proc / overlay など) とマウントポイント (`/`・`/tmp`・`/var` など) で行う
 - sniper SDK イメージはローリング更新される。再現性を厳密にしたい場合は
   steamdev の Dockerfile の `FROM` をダイジェスト固定にする
 
@@ -191,6 +193,9 @@ zenity は自プロセスの子だけを SIGKILL で閉じる。zenity は SIGTE
 ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) はホームのゴミ箱
 (`~/.local/share/Trash/files` と `info/*.trashinfo`) に入り、`gio trash --list` に表示され、
 `gio trash --restore` (GNOME の「ゴミ箱」と同じ GVfs) で元に戻せることを確認した。
+ユーザーがマウントしたドライブ (udisks で自動マウントした ext4、`/run/media/<user>/...`) では
+`.Trash-<uid>` に入って GNOME のゴミ箱に表示され、元に戻せる。tmpfs の `/tmp`・`/dev/shm` では
+`false` が返り、ファイルはそのまま残る。
 
 音声は miniaudio が選ばれる (ログに `🎧 Audio backend: MiniAudio`)。PipeWire (pipewire-pulse) 環境で
 libpulse が実行時に読み込まれ、MP3 (`example/test.mp3`, 103.42 秒) と MIDI (`example/midi/test.mid`,

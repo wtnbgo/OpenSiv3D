@@ -24,6 +24,13 @@
 #	include <cstdlib>
 #	include <string>
 # endif
+# if SIV3D_PLATFORM(LINUX)
+#	include <sys/sysmacros.h>
+#	include <fstream>
+#	include <sstream>
+#	include <array>
+#	include <string_view>
+# endif
 # if SIV3D_PLATFORM(MACOS)
 #	include <mach-o/dyld.h>
 #	include <climits>
@@ -277,6 +284,115 @@ namespace s3d
 			return current.string();
 		}
 
+		// /proc/self/mountinfo のマウントポイントは空白などが \ooo (8 進) でエスケープされている
+		[[nodiscard]]
+		static std::string UnescapeMountInfo(const std::string& s)
+		{
+			std::string out;
+			out.reserve(s.size());
+
+			for (size_t i = 0; i < s.size(); ++i)
+			{
+				if ((s[i] == '\\') && (i + 3 < s.size() + 0) && ('0' <= s[i + 1] && s[i + 1] <= '7')
+					&& ('0' <= s[i + 2] && s[i + 2] <= '7') && ('0' <= s[i + 3] && s[i + 3] <= '7'))
+				{
+					out.push_back(static_cast<char>(((s[i + 1] - '0') << 6) | ((s[i + 2] - '0') << 3) | (s[i + 3] - '0')));
+					i += 3;
+				}
+				else
+				{
+					out.push_back(s[i]);
+				}
+			}
+
+			return out;
+		}
+
+		// dev のファイルシステムが「システム内部のマウント」か。
+		// GIO (g_file_trash) はシステム内部のマウント (tmpfs の /tmp など) ではゴミ箱への移動を
+		// サポートせず失敗を返す。そこに .Trash-<uid> を作っても GNOME などのゴミ箱 (GVfs) には表示されず、
+		// 元に戻せない (tmpfs なら再起動で消える) ため、同じ判定で失敗させる。
+		// 判定は GIO の g_unix_is_system_fs_type / g_unix_is_mount_path_system_internal に準じる
+		[[nodiscard]]
+		static bool IsSystemInternalMount(const dev_t dev)
+		{
+			static constexpr std::array<std::string_view, 37> SystemFsTypes =
+			{
+				"adfs", "afs", "auto", "autofs", "autofs4", "binfmt_misc", "bpf", "cgroup", "cgroup2",
+				"configfs", "debugfs", "devfs", "devpts", "devtmpfs", "efivarfs", "fusectl", "hugetlbfs",
+				"mqueue", "nfsd", "nsfs", "overlay", "proc", "procfs", "pstore", "ramfs", "rootfs",
+				"rpc_pipefs", "securityfs", "selinuxfs", "squashfs", "sysfs", "tmpfs", "tracefs", "usbfs",
+				"fuse.portal", "fuse.gvfsd-fuse", "fuse.snapfuse",
+			};
+
+			static constexpr std::array<std::string_view, 25> SystemMountPaths =
+			{
+				"/", "/bin", "/boot", "/compat/linux/proc", "/compat/linux/sys", "/dev", "/etc", "/home",
+				"/lib", "/lib64", "/libexec", "/live/cow", "/live/image", "/media", "/mnt", "/opt",
+				"/proc", "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var", "/var/tmp",
+			};
+
+			std::ifstream ifs{ "/proc/self/mountinfo" };
+			std::string line;
+
+			while (std::getline(ifs, line))
+			{
+				// <id> <parent> <major>:<minor> <root> <mountpoint> <options> [optional...] - <fstype> <source> <superopts>
+				std::istringstream iss{ line };
+				std::string id, parent, majmin, root, mountPoint;
+
+				if (not (iss >> id >> parent >> majmin >> root >> mountPoint))
+				{
+					continue;
+				}
+
+				unsigned int major = 0, minor = 0;
+
+				if ((std::sscanf(majmin.c_str(), "%u:%u", &major, &minor) != 2) || (makedev(major, minor) != dev))
+				{
+					continue;
+				}
+
+				const size_t sep = line.find(" - ");
+				std::string fsType;
+
+				if (sep != std::string::npos)
+				{
+					std::istringstream rest{ line.substr(sep + 3) };
+					rest >> fsType;
+				}
+
+				const std::string mp = UnescapeMountInfo(mountPoint);
+
+				for (const auto& t : SystemFsTypes)
+				{
+					if (fsType == t)
+					{
+						return true;
+					}
+				}
+
+				for (const auto& m : SystemMountPaths)
+				{
+					if (mp == m)
+					{
+						return true;
+					}
+				}
+
+				// /var/... 以下 (/var/lib/docker など) もシステム内部扱い
+				if (mp.starts_with("/var/") || mp.starts_with("/proc/") || mp.starts_with("/sys/") || mp.starts_with("/dev/"))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			// 見つからない場合は従来どおり (ゴミ箱に入れる)
+			return false;
+		}
+
 		[[nodiscard]]
 		static bool TrashFile(const FilePathView path)
 		{
@@ -324,7 +440,13 @@ namespace s3d
 			}
 			else
 			{
-				// 別のファイルシステム: <topdir>/.Trash-<uid> (Path= は topdir からの相対)
+				// 別のファイルシステム: <topdir>/.Trash-<uid> (Path= は topdir からの相対)。
+				// ただしシステム内部のマウント (tmpfs の /tmp など) では GIO と同じく失敗を返す
+				if (IsSystemInternalMount(srcStat.st_dev))
+				{
+					return false;
+				}
+
 				const std::string topdir = FindMountPoint(src, srcStat.st_dev);
 				trashDir = ((topdir == "/") ? std::string{} : topdir) + "/.Trash-" + std::to_string(::getuid());
 
