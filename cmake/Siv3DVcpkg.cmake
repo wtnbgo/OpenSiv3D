@@ -57,6 +57,10 @@ if(NOT DEFINED VCPKG_TARGET_TRIPLET)
     endif()
   else()
     set(VCPKG_TARGET_TRIPLET "x64-linux" CACHE STRING "")
+    # vcpkg の linux.cmake (chainload) は VCPKG_TARGET_ARCHITECTURE から CMAKE_SYSTEM_PROCESSOR を決める。
+    # 未設定だと CMAKE_SYSTEM_PROCESSOR が空になり、x86_64 向けの設定 (Siv3D の -msse4.2 など) が
+    # 効かずにコンパイルできない (プリセット x64-linux と同じ値にする)
+    set(VCPKG_TARGET_ARCHITECTURE "x64" CACHE STRING "")
     set(VCPKG_CRT_LINKAGE "dynamic" CACHE STRING "")
     set(VCPKG_LIBRARY_LINKAGE "static" CACHE STRING "")
     if(DEFINED _siv3d_vcpkg_root AND NOT DEFINED VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
