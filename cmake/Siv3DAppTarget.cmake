@@ -261,6 +261,11 @@ END
     # SDL3 は GLES コンテキスト要求時に libEGL / libGLESv2 を実行時に dlopen するため、
     # vcpkg の angle (overlay triplet で dylib 化) を Contents/Frameworks に同梱し、
     # パスはエンジン (CWindow::init) が SDL のヒントで渡す。
+    # find_package の IMPORTED ターゲットはディレクトリスコープなので、OpenSiv3D (add_subdirectory) 側で
+    # 見つけたものはアプリのディレクトリからは見えない。見えなければここで改めて探す
+    if(NOT TARGET unofficial::angle::libEGL)
+      find_package(unofficial-angle CONFIG REQUIRED)
+    endif()
     set(_angle_libs unofficial::angle::libEGL unofficial::angle::libGLESv2)
     if(TARGET unofficial::angle::libANGLE)
       get_target_property(_angle_type unofficial::angle::libANGLE TYPE)
