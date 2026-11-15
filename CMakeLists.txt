@@ -9,19 +9,11 @@ add_compile_definitions("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CX
 add_link_options("$<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/DEBUG>")
 
 # ---------------------------------------------
-# 動画のオプション (vcpkg の manifest feature と連動するので project() より前で決める)
+# vcpkg の設定と動画のオプション (vcpkg の manifest feature と連動するので project() より前で決める)
+# アプリから add_subdirectory された場合は、アプリ側 (cmake/Siv3DAppPrelude.cmake) で設定済み
 # ---------------------------------------------
-# WebM (VP8 / VP9 + Vorbis / Opus) を movie-player (https://github.com/wamsoft/movie-player) で再生する
-option(SIV3D_WITH_MOVIEPLAYER "Play WebM videos with movie-player (libvpx)" ON)
-# Linux: opencv4 に FFmpeg (LGPL、共有ライブラリで同梱) を組み込み、MP4 などを VideoReader で開けるようにする。
-# OFF にすると FFmpeg を一切含まない (Linux で開ける動画は WebM だけになる)。Windows / macOS は OS の機能を使うので影響しない
-option(SIV3D_WITH_FFMPEG "Linux: build opencv4 with FFmpeg (LGPL, bundled as shared libraries)" ON)
-if(SIV3D_WITH_MOVIEPLAYER)
-  list(APPEND VCPKG_MANIFEST_FEATURES "movieplayer")
-endif()
-if(SIV3D_WITH_FFMPEG)
-  list(APPEND VCPKG_MANIFEST_FEATURES "ffmpeg")
-endif()
+set(SIV3D_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "OpenSiv3D source directory")
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/Siv3DVcpkg.cmake")
 
 project(OpenSiv3D
     VERSION 0.6.16
@@ -66,7 +58,8 @@ include(FetchContent)
 FetchContent_Declare(
   SDL3
   GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-  GIT_TAG main
+  # 安定版に固定する (main は開発版で、取得するたびに変わる)
+  GIT_TAG release-3.4.20
 )
 set(SDL_SHARED ON CACHE BOOL "Build SDL shared library")
 set(SDL_STATIC OFF CACHE BOOL "Build SDL static library")
@@ -1038,6 +1031,8 @@ target_link_libraries(Siv3D
 PUBLIC
   SDL3::SDL3
 )
+# 公開ヘッダは SIV3D_USE_SDL3 で SDL3 版の宣言に切り替わる (Windows の旧ライブラリ指定などを外す) ので、利用側にも伝える
+target_compile_definitions(Siv3D INTERFACE SIV3D_USE_SDL3)
 if(SIV3D_WITH_MOVIEPLAYER)
   target_sources(Siv3D PRIVATE
     $<TARGET_OBJECTS:Siv3D_ThirdParty_movieplayer>
@@ -1132,155 +1127,102 @@ target_compile_definitions(Siv3D PRIVATE
 add_library(Siv3D::Siv3D ALIAS Siv3D)
 
 # Siv3D install settings
-message(STATUS "[info] CMAKE_INSTALL_LIBDIR: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
-message(STATUS "[info] CMAKE_INSTALL_INCLUDEDIR: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/Siv3D")
+# ライブラリとヘッダの install は OpenSiv3D をトップレベルでビルドしたときだけ (既定)。
+# アプリから add_subdirectory した場合は、アプリの配布物 (cmake --install) に混ざらないよう行わない
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(_siv3d_install_library_default ON)
+else()
+  set(_siv3d_install_library_default OFF)
+endif()
+option(SIV3D_INSTALL_LIBRARY "Install the Siv3D library, headers and CMake config" ${_siv3d_install_library_default})
 
-# SDL3の関連ターゲットをリストに追加
-set(SDL3_INSTALL_TARGETS "")
-if(TARGET SDL3-shared)
-  list(APPEND SDL3_INSTALL_TARGETS SDL3-shared)
-endif()
-if(TARGET SDL3-static)
-  list(APPEND SDL3_INSTALL_TARGETS SDL3-static)
-endif()
-if(TARGET SDL3_Headers)
-  list(APPEND SDL3_INSTALL_TARGETS SDL3_Headers)
-endif()
+if(SIV3D_INSTALL_LIBRARY)
+  message(STATUS "[info] CMAKE_INSTALL_LIBDIR: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+  message(STATUS "[info] CMAKE_INSTALL_INCLUDEDIR: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/Siv3D")
 
-install(
-  TARGETS Siv3D ${SDL3_INSTALL_TARGETS}
-  EXPORT Siv3DTargets
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-install(
-  EXPORT Siv3DTargets
-  FILE Siv3DConfig.cmake
-  NAMESPACE Siv3D::
-  EXPORT_LINK_INTERFACE_LIBRARIES
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Siv3D
-)
-install(
-  FILES Siv3D/include/Siv3D.hpp Siv3D/include/HamFramework.hpp
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Siv3D
-)
-install(
-  DIRECTORY Siv3D/include/Siv3D Siv3D/include/ThirdParty
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Siv3D
-)
+  # SDL3の関連ターゲットをリストに追加
+  set(SDL3_INSTALL_TARGETS "")
+  if(TARGET SDL3-shared)
+    list(APPEND SDL3_INSTALL_TARGETS SDL3-shared)
+  endif()
+  if(TARGET SDL3-static)
+    list(APPEND SDL3_INSTALL_TARGETS SDL3-static)
+  endif()
+  if(TARGET SDL3_Headers)
+    list(APPEND SDL3_INSTALL_TARGETS SDL3_Headers)
+  endif()
+
+  install(
+    TARGETS Siv3D ${SDL3_INSTALL_TARGETS}
+    EXPORT Siv3DTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
+  install(
+    EXPORT Siv3DTargets
+    FILE Siv3DConfig.cmake
+    NAMESPACE Siv3D::
+    EXPORT_LINK_INTERFACE_LIBRARIES
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Siv3D
+  )
+  install(
+    FILES Siv3D/include/Siv3D.hpp Siv3D/include/HamFramework.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Siv3D
+  )
+  install(
+    DIRECTORY Siv3D/include/Siv3D Siv3D/include/ThirdParty
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Siv3D
+  )
+endif()
 
 # ---------------------------------------------
 # Sample App
 # ---------------------------------------------
 
-option(SIV3D_BUILD_SAMPLE "Build Siv3D sample application" OFF)
+# ---------------------------------------------
+# Linux: 同梱する FFmpeg (共有ライブラリ) とライセンス文 (siv3d_add_app() が実行ファイルの隣と配布物に置く)
+# ---------------------------------------------
+set(SIV3D_LINUX_FFMPEG_LIBS "" CACHE INTERNAL "")
+set(SIV3D_LINUX_LICENSE_DIR "" CACHE INTERNAL "")
+if(UNIX AND NOT APPLE)
+  set(SIV3D_LINUX_VCPKG_LIBDIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+  file(GLOB SIV3D_LINUX_FFMPEG_LIBS
+    "${SIV3D_LINUX_VCPKG_LIBDIR}/libavcodec.so.*"
+    "${SIV3D_LINUX_VCPKG_LIBDIR}/libavformat.so.*"
+    "${SIV3D_LINUX_VCPKG_LIBDIR}/libavutil.so.*"
+    "${SIV3D_LINUX_VCPKG_LIBDIR}/libswresample.so.*"
+    "${SIV3D_LINUX_VCPKG_LIBDIR}/libswscale.so.*"
+  )
+  # glob は soname のリンク (libavcodec.so.61 → libavcodec.so.61.x.y) と実体の両方を拾う (両方を同梱する)
+  if(SIV3D_LINUX_FFMPEG_LIBS)
+    # LGPL の配布条件: ffmpeg のライセンス文と、使った ffmpeg のソースの入手先を同梱する
+    #   licenses/ffmpeg.txt        ライセンス文 (vcpkg の share/ffmpeg/copyright = LGPL 2.1)
+    #   licenses/ffmpeg-source.txt バージョン・ソースの場所・vcpkg のポート (vcpkg.spdx.json から生成)
+    set(SIV3D_LINUX_FFMPEG_SHARE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/ffmpeg")
+    set(SIV3D_LINUX_LICENSE_DIR "${CMAKE_CURRENT_BINARY_DIR}/licenses")
+    file(MAKE_DIRECTORY "${SIV3D_LINUX_LICENSE_DIR}")
+    configure_file("${SIV3D_LINUX_FFMPEG_SHARE}/copyright" "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg.txt" COPYONLY)
 
-if(SIV3D_BUILD_SAMPLE)
-  add_executable(Siv3DApp SDL3/App/Main.cpp)
-  target_link_libraries(Siv3DApp PRIVATE Siv3D::Siv3D)
-  target_compile_features(Siv3DApp PRIVATE cxx_std_20)
-  set_target_properties(Siv3DApp PROPERTIES
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/SDL3/App"
-  )
-  target_compile_options(Siv3DApp PRIVATE
-    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/utf-8>
-    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/bigobj>
-  )
-  target_compile_definitions(Siv3DApp PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:_UNICODE>
-    $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
-    SIV3D_USE_SDL3
-  )
-  # Copy SDL3 DLL to the executable output directory
-  add_custom_command(TARGET Siv3DApp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      $<TARGET_FILE:SDL3::SDL3-shared>
-      $<TARGET_FILE_DIR:Siv3DApp>
-    COMMENT "Copying SDL3 DLL to output directory"
-  )
-
-  if(UNIX AND NOT APPLE)
-    # Linux: steamrt sniper SDK (glibc 2.31) でのビルド・配布を想定した設定 (SDL3/BUILD_LINUX.md)
-    #
-    # 同梱 libSDL3 を exe と同じフォルダから確実に読ませる。Steam 起動時は
-    # LD_LIBRARY_PATH の先頭に Steam ランタイムや /usr/lib が入るため、
-    # LD_LIBRARY_PATH の後に探される RUNPATH ではシステム側の libSDL3 が勝ってしまう。
-    # LD_LIBRARY_PATH より先に探される DT_RPATH ($ORIGIN) にする。
-    set_target_properties(Siv3DApp PROPERTIES
-      BUILD_RPATH "\$ORIGIN"
-      INSTALL_RPATH "\$ORIGIN"
-    )
-    target_link_options(Siv3DApp PRIVATE "LINKER:--disable-new-dtags")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      # 例外の巻き戻し処理 (libgcc の unwinder) は共有の libgcc_s.so.1 から解決させる。
-      # sniper SDK の gcc-14 は libstdc++ / libgcc を静的にリンクする (-shared-libgcc も
-      # 効かない) ため、共有ライブラリ側と unwinder の複製を持ち合わないよう直接リンクする。
-      # libstdc++ は静的のままなので GLIBCXX 依存は増えない。
-      target_link_options(Siv3DApp PRIVATE
-        "SHELL:-Wl,--push-state,--no-as-needed -l:libgcc_s.so.1 -Wl,--pop-state")
+    set(SIV3D_FFMPEG_PORT_VERSION "unknown")
+    set(SIV3D_FFMPEG_PORT_SOURCE "unknown")
+    set(SIV3D_FFMPEG_UPSTREAM_SOURCE "unknown")
+    if(EXISTS "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json")
+      file(READ "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json" _spdx)
+      string(JSON _count LENGTH "${_spdx}" packages)
+      math(EXPR _last "${_count} - 1")
+      foreach(i RANGE ${_last})
+        string(JSON _name GET "${_spdx}" packages ${i} name)
+        string(JSON _loc ERROR_VARIABLE _err GET "${_spdx}" packages ${i} downloadLocation)
+        if(_name STREQUAL "ffmpeg")
+          string(JSON SIV3D_FFMPEG_PORT_VERSION GET "${_spdx}" packages ${i} versionInfo)
+          set(SIV3D_FFMPEG_PORT_SOURCE "${_loc}")
+        elseif(_name STREQUAL "ffmpeg/ffmpeg")
+          set(SIV3D_FFMPEG_UPSTREAM_SOURCE "${_loc}")
+        endif()
+      endforeach()
     endif()
-    # exe が NEEDED で引く soname (libSDL3.so.0) のリンクもビルドツリーに置く
-    add_custom_command(TARGET Siv3DApp POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E create_symlink
-        $<TARGET_FILE_NAME:SDL3::SDL3-shared>
-        $<TARGET_FILE_DIR:Siv3DApp>/$<TARGET_SONAME_FILE_NAME:SDL3::SDL3-shared>
-    )
-
-    # install: <prefix>/ 直下に そのまま起動できる形で配置する
-    #   Siv3DApp, libSDL3.so.0.x.y, libSDL3.so.0, resources/ (エンジン資材), example/
-    install(TARGETS Siv3DApp RUNTIME DESTINATION .)
-    install(FILES
-      $<TARGET_FILE:SDL3::SDL3-shared>
-      $<TARGET_SONAME_FILE:SDL3::SDL3-shared>
-      DESTINATION .)
-    # エンジン資材 (Resource() = exe のフォルダ/resources/) とサンプル資材 (カレント相対 example/)
-    install(DIRECTORY Web/App/resources Web/App/example DESTINATION .)
-
-    # ffmpeg (opencv4 の VideoCapture が使う) は LGPL を守るため共有ライブラリにしている
-    # (cmake/vcpkg-triplets/x64-linux.cmake)。libav* / libsw* の .so を実行ファイルの隣に置き、
-    # exe の DT_RPATH ($ORIGIN) で解決させる
-    set(SIV3D_LINUX_VCPKG_LIBDIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
-    file(GLOB SIV3D_LINUX_FFMPEG_LIBS
-      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavcodec.so.*"
-      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavformat.so.*"
-      "${SIV3D_LINUX_VCPKG_LIBDIR}/libavutil.so.*"
-      "${SIV3D_LINUX_VCPKG_LIBDIR}/libswresample.so.*"
-      "${SIV3D_LINUX_VCPKG_LIBDIR}/libswscale.so.*"
-    )
-    if(SIV3D_LINUX_FFMPEG_LIBS)
-      # soname のリンク (libavcodec.so.61 → libavcodec.so.61.x.y) もそのまま置く
-      install(FILES ${SIV3D_LINUX_FFMPEG_LIBS} DESTINATION .)
-
-      # LGPL の配布条件: ffmpeg のライセンス文と、使った ffmpeg のソースの入手先を同梱する
-      #   licenses/ffmpeg.txt        ライセンス文 (vcpkg の share/ffmpeg/copyright = LGPL 2.1)
-      #   licenses/ffmpeg-source.txt バージョン・ソースの場所・vcpkg のポート (vcpkg.spdx.json から生成)
-      set(SIV3D_LINUX_FFMPEG_SHARE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/ffmpeg")
-      set(SIV3D_LINUX_LICENSE_DIR "${CMAKE_CURRENT_BINARY_DIR}/licenses")
-      file(MAKE_DIRECTORY "${SIV3D_LINUX_LICENSE_DIR}")
-      configure_file("${SIV3D_LINUX_FFMPEG_SHARE}/copyright" "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg.txt" COPYONLY)
-
-      set(SIV3D_FFMPEG_PORT_VERSION "unknown")
-      set(SIV3D_FFMPEG_PORT_SOURCE "unknown")
-      set(SIV3D_FFMPEG_UPSTREAM_SOURCE "unknown")
-      if(EXISTS "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json")
-        file(READ "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json" _spdx)
-        string(JSON _count LENGTH "${_spdx}" packages)
-        math(EXPR _last "${_count} - 1")
-        foreach(i RANGE ${_last})
-          string(JSON _name GET "${_spdx}" packages ${i} name)
-          string(JSON _loc ERROR_VARIABLE _err GET "${_spdx}" packages ${i} downloadLocation)
-          if(_name STREQUAL "ffmpeg")
-            string(JSON SIV3D_FFMPEG_PORT_VERSION GET "${_spdx}" packages ${i} versionInfo)
-            set(SIV3D_FFMPEG_PORT_SOURCE "${_loc}")
-          elseif(_name STREQUAL "ffmpeg/ffmpeg")
-            set(SIV3D_FFMPEG_UPSTREAM_SOURCE "${_loc}")
-          endif()
-        endforeach()
-      endif()
-      file(WRITE "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg-source.txt"
+    file(WRITE "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg-source.txt"
 "FFmpeg (libavcodec / libavformat / libavutil / libswresample / libswscale)
 
 This application uses FFmpeg libraries licensed under the GNU Lesser General
@@ -1298,67 +1240,23 @@ Source code:
                   ${SIV3D_FFMPEG_PORT_SOURCE}
                   features: avcodec, avformat, swresample, swscale (shared libraries)
 ")
-      install(DIRECTORY "${SIV3D_LINUX_LICENSE_DIR}/" DESTINATION licenses)
-      add_custom_command(TARGET Siv3DApp POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${SIV3D_LINUX_LICENSE_DIR}" $<TARGET_FILE_DIR:Siv3DApp>/licenses
-      )
-      foreach(lib IN LISTS SIV3D_LINUX_FFMPEG_LIBS)
-        add_custom_command(TARGET Siv3DApp POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different "${lib}" $<TARGET_FILE_DIR:Siv3DApp>
-        )
-      endforeach()
-    endif()
+    set(SIV3D_LINUX_FFMPEG_LIBS "${SIV3D_LINUX_FFMPEG_LIBS}" CACHE INTERNAL "")
+    set(SIV3D_LINUX_LICENSE_DIR "${SIV3D_LINUX_LICENSE_DIR}" CACHE INTERNAL "")
   endif()
-  # エンジンリソース (GLES 用 essl シェーダ / フォント / サウンドフォント / テクスチャ) と
-  # サンプル用 example を実行ファイルの隣にコピーする (全プラットフォーム共通)。
-  # Resource() は ModulePath の親ディレクトリ + "resources/" を参照する。
-  # macOS の .app では $<TARGET_FILE_DIR> は Contents/MacOS になる。
-  set(_siv3d_engine_resource_src "${CMAKE_CURRENT_SOURCE_DIR}/Web/App/resources/engine")
-  set(_siv3d_engine_resource_dst "$<TARGET_FILE_DIR:Siv3DApp>/resources/engine")
-  foreach(_dir font soundfont texture shader/essl)
-    add_custom_command(TARGET Siv3DApp POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${_siv3d_engine_resource_src}/${_dir}"
-        "${_siv3d_engine_resource_dst}/${_dir}"
-    )
-  endforeach()
-  add_custom_command(TARGET Siv3DApp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-      "${CMAKE_CURRENT_SOURCE_DIR}/WindowsDesktop/App/example"
-      "$<TARGET_FILE_DIR:Siv3DApp>/example"
-    COMMENT "Copying engine resources and examples to output directory"
+endif()
+
+# ---------------------------------------------
+# アプリ (siv3d_add_app) とサンプルアプリ
+# ---------------------------------------------
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Siv3DAppTarget.cmake")
+
+option(SIV3D_BUILD_SAMPLE "Build Siv3D sample application" OFF)
+
+if(SIV3D_BUILD_SAMPLE)
+  # SDL3/App/Main.cpp。出力はソース側の SDL3/App/<Config>/ (siv3d-app.json でアセット example/ を指定)
+  siv3d_add_app(Siv3DApp
+    SOURCES SDL3/App/Main.cpp
+    CONFIG SDL3/App/siv3d-app.json
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/SDL3/App"
   )
-
-  if(APPLE)
-    # macOS: .app バンドルとしてビルドする
-    set_target_properties(Siv3DApp PROPERTIES
-      MACOSX_BUNDLE ON
-      MACOSX_BUNDLE_GUI_IDENTIFIER "com.siv3d.Siv3DApp"
-      MACOSX_BUNDLE_BUNDLE_NAME "Siv3DApp"
-      MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-      MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-    )
-
-    # macOS には OpenGL ES が無いので ANGLE (Metal バックエンド) を使う。
-    # SDL3 は GLES コンテキスト要求時に libEGL / libGLESv2 を実行時に dlopen するため、
-    # vcpkg の angle (overlay triplet で dylib 化) を Contents/Frameworks に同梱し、
-    # パスはエンジン (CWindow::init) が SDL のヒントで渡す。
-    set(_siv3d_angle_libs unofficial::angle::libEGL unofficial::angle::libGLESv2)
-    if(TARGET unofficial::angle::libANGLE)
-      get_target_property(_siv3d_angle_type unofficial::angle::libANGLE TYPE)
-      if(_siv3d_angle_type STREQUAL "SHARED_LIBRARY")
-        list(APPEND _siv3d_angle_libs unofficial::angle::libANGLE)
-      endif()
-    endif()
-    set(_siv3d_fw_dir "$<TARGET_BUNDLE_CONTENT_DIR:Siv3DApp>/Frameworks")
-    add_custom_command(TARGET Siv3DApp POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${_siv3d_fw_dir}")
-    foreach(_lib ${_siv3d_angle_libs})
-      add_custom_command(TARGET Siv3DApp POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${_lib}>" "${_siv3d_fw_dir}/")
-    endforeach()
-    # libSDL3 (Contents/MacOS) と libEGL → libGLESv2 の依存 (@rpath/...) を解決させる
-    set_property(TARGET Siv3DApp APPEND PROPERTY BUILD_RPATH "@executable_path" "@executable_path/../Frameworks")
-    set_property(TARGET Siv3DApp APPEND PROPERTY INSTALL_RPATH "@executable_path" "@executable_path/../Frameworks")
-  endif()
 endif()

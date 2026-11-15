@@ -1,0 +1,11 @@
+{
+  "name": "Siv3DApp",
+  "version": "0.6.16",
+  "bundleId": "com.siv3d.Siv3DApp",
+  "assets": [
+    { "from": "../../WindowsDesktop/App/example", "to": "example" }
+  ],
+  "windows": {
+    "console": true
+  }
+}
