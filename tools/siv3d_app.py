@@ -202,6 +202,14 @@ def stage(app, env):
     log(f"staged: {app.dist_dir}")
 
 
+def _tar_normalize_owner(info):
+    info.uid = 0
+    info.gid = 0
+    info.uname = ""
+    info.gname = ""
+    return info
+
+
 def package(app):
     if not app.dist_dir.exists():
         fail("not staged yet (run stage first)")
@@ -223,8 +231,11 @@ def package(app):
         elif fmt in ("tar.gz", "tgz"):
             out = app.package_dir / f"{base}.tar.gz"
             with tarfile.open(out, "w:gz") as t:
-                # シンボリックリンク (libSDL3.so.0 など) と実行属性をそのまま保つ
-                t.add(app.dist_dir, arcname=base)
+                # シンボリックリンク (libSDL3.so.0 など) と実行属性をそのまま保つ。
+                # 所有者は作った環境 (コンテナなら root、ホストならビルドした人) によらず
+                # uid / gid 0・名前なしにそろえる (tar --owner=0 --group=0 --numeric-owner と同じ)。
+                # 展開すると展開した人の所有になる
+                t.add(app.dist_dir, arcname=base, filter=_tar_normalize_owner)
         elif fmt == "dir":
             out = app.package_dir / base
             if out.exists():
