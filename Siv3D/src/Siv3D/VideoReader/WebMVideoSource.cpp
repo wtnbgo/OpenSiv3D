@@ -29,7 +29,7 @@
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/Unicode.hpp>
 # include "VideoSource.hpp"
-# include "MovieReadStream.hpp"
+# include "MovieProbe.hpp"
 
 namespace s3d
 {
@@ -67,7 +67,15 @@ namespace s3d
 					return false;
 				}
 
-				// 最初の VP8 / VP9 の映像トラックを使う
+				const detail::WebMTracks tracks = detail::ProbeWebM(m_extractor);
+
+				if (not tracks.hasVideo())
+				{
+					LOG_FAIL(U"VideoReader: WebM has no supported video track ({})"_fmt(detail::ToString(tracks)));
+					return false;
+				}
+
+				// 最初の VP8 / VP9 の映像トラックを使う (音声トラックは VideoReader では使わない)
 				const size_t trackCount = m_extractor.GetTrackCount();
 
 				for (size_t i = 0; i < trackCount; ++i)
@@ -110,8 +118,8 @@ namespace s3d
 
 					m_decoded.InitByType(TRACK_TYPE_VIDEO, 0);
 
-					LOG_INFO(U"ℹ️ VideoReader: WebM (movie-player) codec: {}, alpha: {}, duration: {:.3f}s"_fmt(
-						Unicode::Widen(m_decoder->CodecName()), m_hasAlpha, (m_extractor.GetDurationUs() / 1'000'000.0)));
+					LOG_INFO(U"ℹ️ VideoReader: WebM (movie-player) {}, duration: {:.3f}s"_fmt(
+						detail::ToString(tracks), (m_extractor.GetDurationUs() / 1'000'000.0)));
 
 					return true;
 				}

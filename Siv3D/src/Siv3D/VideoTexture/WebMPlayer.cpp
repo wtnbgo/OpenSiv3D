@@ -19,7 +19,7 @@
 # include <Siv3D/IAudioStream.hpp>
 # include <Siv3D/EngineLog.hpp>
 # include "WebMPlayer.hpp"
-# include "../VideoReader/MovieReadStream.hpp"
+# include "../VideoReader/MovieProbe.hpp"
 
 namespace s3d
 {
@@ -269,6 +269,29 @@ namespace s3d
 				return false;
 			}
 
+			// トラック構成を先に調べる。音声のコーデックは Opus (一般的) と Vorbis (Opus 非対応環境向け) の
+			// どちらもありうるので、ここで判定してログに残す。音声トラックが無い (または非対応の) WebM は
+			// VideoReader 経由 (音声なし) で扱う
+			{
+				WebmExtractor extractor;
+
+				if (not extractor.Open(stream))
+				{
+					stream->Release();
+					return false;
+				}
+
+				m_tracks = detail::ProbeWebM(extractor);
+				stream->Seek(0, SEEK_SET);
+			}
+
+			if ((not m_tracks.hasVideo()) || (not m_tracks.hasAudio()))
+			{
+				LOG_INFO(U"ℹ️ VideoTexture: WebM has no supported audio track, playing without audio ({})"_fmt(detail::ToString(m_tracks)));
+				stream->Release();
+				return false;
+			}
+
 			m_bridge = std::make_shared<AudioBridge>();
 
 			IMoviePlayer::InitParam param;
@@ -313,8 +336,8 @@ namespace s3d
 
 			m_audio = Audio{ m_bridge, Arg::sampleRate = static_cast<uint32>(m_bridge->sampleRate()) };
 
-			LOG_INFO(U"ℹ️ VideoTexture: WebM with audio (movie-player) size: {}, audio: {}Hz, duration: {:.3f}s"_fmt(
-				m_size, m_bridge->sampleRate(), lengthSec()));
+			LOG_INFO(U"ℹ️ VideoTexture: WebM with audio (movie-player) {}, duration: {:.3f}s"_fmt(
+				detail::ToString(m_tracks), lengthSec()));
 
 			return true;
 		}
@@ -378,6 +401,8 @@ namespace s3d
 	private:
 
 		IMoviePlayer* m_player = nullptr;
+
+		detail::WebMTracks m_tracks;
 
 		std::shared_ptr<AudioBridge> m_bridge;
 
