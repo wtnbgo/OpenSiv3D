@@ -18,6 +18,12 @@
 # include <Siv3D/Unicode.hpp>
 # include <Siv3D/FileSystem.hpp>
 
+# if SIV3D_PLATFORM(IOS)
+	// iOS では UIApplicationMain を SDL が持つ。SDL_main.h が main を SDL_main に置き換え、
+	// SDL がアプリの起動処理の後で (メインスレッドで) 呼び出す
+#	include <SDL3/SDL_main.h>
+# endif
+
 void Main();
 
 namespace s3d::detail::init
@@ -47,7 +53,15 @@ int main(int argc, char* argv[])
 		// 指定パス内の resources/ をリソースディレクトリとして設定
 		detail::init::SetCustomResourceDirectory(Unicode::Widen((appDirectory / "resources").string()));
 	}
-# if SIV3D_PLATFORM(MACOS)
+# if SIV3D_PLATFORM(IOS)
+	else
+	{
+		// iOS: リソースとアセットは .app の直下 (実行ファイルと同じ場所) に置くので、そこをカレントディレクトリにする
+		const std::filesystem::path modulePath{ FileSystem::ModulePath().toUTF8() };
+		std::error_code ec;
+		std::filesystem::current_path(modulePath.parent_path(), ec);
+	}
+# elif SIV3D_PLATFORM(MACOS)
 	else
 	{
 		// .app バンドルとして起動された場合 (Finder / open) カレントディレクトリは "/" になるため、

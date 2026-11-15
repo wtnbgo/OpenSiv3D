@@ -13,6 +13,8 @@
 # include <Siv3D/DirectoryWatcher.hpp>
 # if SIV3D_PLATFORM(WINDOWS)
 #	include <Siv3D/Windows/Windows.hpp>
+# elif SIV3D_PLATFORM(IOS)
+	// iOS: FSEvents (CoreServices) が無いので未対応 (常に非アクティブ)
 # elif SIV3D_PLATFORM(MACOS)
 #	include <atomic>
 #	include <mutex>
@@ -80,6 +82,10 @@ namespace s3d
 		static void Update(std::stop_token stop_token, DirectoryWatcherDetail* watcher);
 
 		static void CALLBACK OnChangeNotification(const DWORD dwErrorCode, const DWORD dwNumberOfBytesTransfered, const LPOVERLAPPED lpOverlapped);
+
+	# elif SIV3D_PLATFORM(IOS)
+
+		FilePath m_targetDirectory;
 
 	# elif SIV3D_PLATFORM(MACOS)
 

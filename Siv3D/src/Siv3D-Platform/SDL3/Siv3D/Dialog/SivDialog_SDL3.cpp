@@ -39,7 +39,7 @@
 
 namespace s3d
 {
-# if SIV3D_PLATFORM(MACOS)
+# if SIV3D_PLATFORM(MACOS) && !SIV3D_PLATFORM(IOS)
 
 	// SivDialog_SDL3_macOS.mm
 	void MacOS_BeginFileDialog();
@@ -263,7 +263,7 @@ namespace s3d
 
 			SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, allowMany);
 
-		# if SIV3D_PLATFORM(MACOS)
+		# if SIV3D_PLATFORM(MACOS) && !SIV3D_PLATFORM(IOS)
 			// ダイアログ表示中だけ Edit メニューを追加する (パネル内で ⌘A / ⌘C / ⌘V 等を効かせるため)
 			MacOS_BeginFileDialog();
 		# endif
@@ -285,7 +285,7 @@ namespace s3d
 					cancelRequested = true;
 					g_quitRequested = QuitTerminatesApp();
 
-				# if SIV3D_PLATFORM(MACOS)
+				# if SIV3D_PLATFORM(MACOS) && !SIV3D_PLATFORM(IOS)
 					// 表示中のパネルに cancel: を送ると、SDL のコールバックがキャンセルで呼ばれる
 					LOG_INFO(U"File dialog: cancelled by quit request");
 					MacOS_CancelFileDialogs();
@@ -307,7 +307,7 @@ namespace s3d
 				SDL_Delay(10);
 			}
 
-		# if SIV3D_PLATFORM(MACOS)
+		# if SIV3D_PLATFORM(MACOS) && !SIV3D_PLATFORM(IOS)
 			MacOS_EndFileDialog();
 		# endif
 
