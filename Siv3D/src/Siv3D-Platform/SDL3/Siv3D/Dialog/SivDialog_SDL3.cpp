@@ -39,6 +39,8 @@ namespace s3d
 	void MacOS_EndFileDialog();
 	void MacOS_CancelFileDialogs();
 
+# endif
+
 	namespace
 	{
 		// 終了要求 (SDL_EVENT_QUIT) を受け取ったか。
@@ -60,12 +62,7 @@ namespace s3d
 		{
 			return ((SIV3D_ENGINE(UserAction)->getTerminationTriggers() & UserAction::CloseButtonClicked) != 0);
 		}
-	}
 
-# endif
-
-	namespace
-	{
 		struct DialogResult
 		{
 			std::atomic<bool> done{ false };
@@ -73,6 +70,25 @@ namespace s3d
 			bool error = false;
 
 			Array<FilePath> paths;
+		};
+
+		// SDL に渡すデータ一式。filters / location 等はコールバックが呼ばれるまで有効である必要があるので、
+		// 終了要求で待機を打ち切った場合 (Windows / Linux) は解放せずに残す
+		struct DialogRequest
+		{
+			std::vector<std::string> names;
+
+			std::vector<std::string> patterns;
+
+			std::vector<SDL_DialogFileFilter> filters;
+
+			std::string location;
+
+			std::string title;
+
+			SDL_PropertiesID props = 0;
+
+			DialogResult result;
 		};
 
 		void SDLCALL OnDialogResult(void* userdata, const char* const* filelist, int)
@@ -132,38 +148,45 @@ namespace s3d
 		Array<FilePath> ShowDialog(const SDL_FileDialogType type, const Array<FileFilter>& filters,
 			const FilePathView defaultLocation, const StringView title, const bool allowMany)
 		{
+			// 終了要求を処理済みのフレームで開かれたダイアログは表示しない
+			if (g_quitRequested || (QuitTerminatesApp() && HasQuitEvent()))
+			{
+				g_quitRequested = true;
+				LOG_INFO(U"File dialog: skipped (quit requested)");
+				return{};
+			}
+
+			DialogRequest* request = new DialogRequest;
+
 			// SDL のフィルタ書式: name と、セミコロン区切りの拡張子 ("png;jpg")。"*" はすべて
-			std::vector<std::string> names, patterns;
-			names.reserve(filters.size());
-			patterns.reserve(filters.size());
+			request->names.reserve(filters.size());
+			request->patterns.reserve(filters.size());
 
 			for (const auto& filter : filters)
 			{
-				names.push_back(filter.name.narrow());
-				patterns.push_back(filter.patterns.isEmpty() ? std::string{ "*" } : filter.patterns.join(U";", U"", U"").narrow());
+				request->names.push_back(filter.name.narrow());
+				request->patterns.push_back(filter.patterns.isEmpty() ? std::string{ "*" } : filter.patterns.join(U";", U"", U"").narrow());
 			}
 
-			// filters はコールバックが呼ばれるまで有効である必要がある (この関数内で待つので OK)
-			std::vector<SDL_DialogFileFilter> sdlFilters;
-			sdlFilters.reserve(filters.size());
+			request->filters.reserve(filters.size());
 
-			for (size_t i = 0; i < names.size(); ++i)
+			for (size_t i = 0; i < request->names.size(); ++i)
 			{
-				sdlFilters.push_back(SDL_DialogFileFilter{ names[i].c_str(), patterns[i].c_str() });
+				request->filters.push_back(SDL_DialogFileFilter{ request->names[i].c_str(), request->patterns[i].c_str() });
 			}
 
 			// ディレクトリ指定の末尾 '/' は呼び出し側 (AsDirectoryLocation) で付ける
-			const std::string location = ToNativePath(defaultLocation);
-			const std::string titleUTF8 = title.narrow();
+			request->location = ToNativePath(defaultLocation);
+			request->title = title.narrow();
 
 			SDL_Window* window = static_cast<SDL_Window*>(SIV3D_ENGINE(Window)->getHandle());
 
-			const SDL_PropertiesID props = SDL_CreateProperties();
+			const SDL_PropertiesID props = request->props = SDL_CreateProperties();
 
-			if (not sdlFilters.empty())
+			if (not request->filters.empty())
 			{
-				SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, sdlFilters.data());
-				SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, static_cast<Sint64>(sdlFilters.size()));
+				SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, request->filters.data());
+				SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, static_cast<Sint64>(request->filters.size()));
 			}
 
 			if (window)
@@ -171,54 +194,55 @@ namespace s3d
 				SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
 			}
 
-			if (not location.empty())
+			if (not request->location.empty())
 			{
-				SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_LOCATION_STRING, location.c_str());
+				SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_LOCATION_STRING, request->location.c_str());
 			}
 
-			if (not titleUTF8.empty())
+			if (not request->title.empty())
 			{
-				SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING, titleUTF8.c_str());
+				SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING, request->title.c_str());
 			}
 
 			SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, allowMany);
 
-			DialogResult result;
-
 		# if SIV3D_PLATFORM(MACOS)
-			if (g_quitRequested || (QuitTerminatesApp() && HasQuitEvent()))
-			{
-				g_quitRequested = true;
-				SDL_DestroyProperties(props);
-				LOG_INFO(U"File dialog: skipped (quit requested)");
-				return{};
-			}
-
 			// ダイアログ表示中だけ Edit メニューを追加する (パネル内で ⌘A / ⌘C / ⌘V 等を効かせるため)
 			MacOS_BeginFileDialog();
 		# endif
 
+			DialogResult& result = request->result;
+
 			SDL_ShowFileDialogWithProperties(type, OnDialogResult, &result, props);
 
-		# if SIV3D_PLATFORM(MACOS)
 			bool cancelRequested = false;
-		# endif
 
 			while (not result.done.load(std::memory_order_acquire))
 			{
 				SDL_PumpEvents();
 
-			# if SIV3D_PLATFORM(MACOS)
 				// 終了要求 (SIGTERM / ⌘Q など) が来たらダイアログをキャンセルして戻る。
 				// SDL_EVENT_QUIT はキューから取り出さずに残し、Siv3D のメインループ (System::Update) で通常どおり処理させる。
 				if ((not cancelRequested) && HasQuitEvent())
 				{
-					LOG_INFO(U"File dialog: cancelled by quit request");
-					MacOS_CancelFileDialogs();
 					cancelRequested = true;
 					g_quitRequested = QuitTerminatesApp();
+
+				# if SIV3D_PLATFORM(MACOS)
+					// 表示中のパネルに cancel: を送ると、SDL のコールバックがキャンセルで呼ばれる
+					LOG_INFO(U"File dialog: cancelled by quit request");
+					MacOS_CancelFileDialogs();
+				# else
+					// Windows / Linux の SDL3 には表示中のダイアログを閉じる手段が無いので、
+					// アプリが終了する場合に限って待機を打ち切る。コールバックは後から呼ばれうるため request は解放しない
+					// (このあとアプリは終了する)
+					if (g_quitRequested)
+					{
+						LOG_INFO(U"File dialog: abandoned by quit request");
+						return{};
+					}
+				# endif
 				}
-			# endif
 
 				SDL_Delay(10);
 			}
@@ -227,10 +251,13 @@ namespace s3d
 			MacOS_EndFileDialog();
 		# endif
 
-			SDL_DestroyProperties(props);
-
 			// Siv3D のパス表記 ('/' 区切り・絶対パス) にそろえる
-			return result.paths.map([](const FilePath& path) { return FileSystem::FullPath(path); });
+			Array<FilePath> paths = result.paths.map([](const FilePath& path) { return FileSystem::FullPath(path); });
+
+			SDL_DestroyProperties(props);
+			delete request;
+
+			return paths;
 		}
 	}
 
