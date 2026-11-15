@@ -1042,10 +1042,13 @@ if(SIV3D_WITH_MOVIEPLAYER)
   target_sources(Siv3D PRIVATE
     $<TARGET_OBJECTS:Siv3D_ThirdParty_movieplayer>
     Siv3D/src/Siv3D/VideoReader/WebMVideoSource.cpp
+    Siv3D/src/Siv3D/VideoTexture/WebMPlayer.cpp
   )
   target_compile_definitions(Siv3D PRIVATE SIV3D_WITH_MOVIEPLAYER)
-  # movie-player の内部ヘッダは WebM 経路のソースだけが参照する
-  set_source_files_properties(Siv3D/src/Siv3D/VideoReader/WebMVideoSource.cpp
+  # movie-player のヘッダは WebM 経路のソースだけが参照する
+  set_source_files_properties(
+    Siv3D/src/Siv3D/VideoReader/WebMVideoSource.cpp
+    Siv3D/src/Siv3D/VideoTexture/WebMPlayer.cpp
     PROPERTIES INCLUDE_DIRECTORIES "${SIV3D_MOVIEPLAYER_INCLUDE_DIRS}")
   target_link_libraries(Siv3D INTERFACE
     unofficial::libvpx::libvpx

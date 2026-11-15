@@ -11,6 +11,9 @@
 
 # include "VideoTextureDetail.hpp"
 # include <Siv3D/EngineLog.hpp>
+# if defined(SIV3D_WITH_MOVIEPLAYER)
+#	include "WebMPlayer.hpp"
+# endif
 
 namespace s3d
 {
@@ -18,15 +21,32 @@ namespace s3d
 
 	VideoTexture::VideoTextureDetail::~VideoTextureDetail() {}
 
-	bool VideoTexture::VideoTextureDetail::load(const FilePathView path, const Loop loop, const TextureDesc desc)
+	bool VideoTexture::VideoTextureDetail::load(const FilePathView path, const Loop loop, [[maybe_unused]] const PlayAudio playAudio, const TextureDesc desc)
 	{
+		m_loop = loop.getBool();
+		m_isSRGB = detail::IsSRGB(desc);
+
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		// 音声付きの WebM は movie-player のプレーヤーで映像と音声を同期して再生する
+		if (playAudio)
+		{
+			m_player = WebMPlayer::Create(path, m_loop);
+
+			if (m_player)
+			{
+				// 最初のフレームがデコードされるまでは黒
+				m_frameImage = Image{ m_player->size(), Palette::Black };
+				m_frameTextures[m_latestTextureIndex] = DynamicTexture{ m_frameImage, (m_isSRGB ? TextureFormat::R8G8B8A8_Unorm_SRGB : TextureFormat::R8G8B8A8_Unorm) };
+				return true;
+			}
+		}
+	# endif
+
 		if (not m_videoReader.open(path))
 		{
 			return false;
 		}
 
-		m_loop = loop.getBool();
-		m_isSRGB = detail::IsSRGB(desc);
 		m_videoReader.readFrame(m_frameImage);
 		m_frameTextures[m_latestTextureIndex] = DynamicTexture{ m_frameImage, (m_isSRGB ? TextureFormat::R8G8B8A8_Unorm_SRGB : TextureFormat::R8G8B8A8_Unorm) };
 
@@ -35,6 +55,16 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::advance(const double deltaTimeSec)
 	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			// 再生位置は音声の時計に従うので deltaTimeSec は使わない
+			m_player->play();
+			updateFromPlayer();
+			return;
+		}
+	# endif
+
 		if (not m_videoReader)
 		{
 			return;
@@ -60,6 +90,14 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::reset()
 	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			m_player->seek(0.0);
+			return;
+		}
+	# endif
+
 		if (not m_videoReader)
 		{
 			return;
@@ -77,12 +115,39 @@ namespace s3d
 
 	double VideoTexture::VideoTextureDetail::posSec() const noexcept
 	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			return m_player->posSec();
+		}
+	# endif
+
 		return m_playTimeSec;
 	}
 
 	void VideoTexture::VideoTextureDetail::setPosSec(const double posSec)
 	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			m_player->seek(Clamp(posSec, 0.0, m_player->lengthSec()));
+			return;
+		}
+	# endif
+
 		m_playTimeSec = Clamp(posSec, 0.0, m_videoReader.getLengthSec());
+	}
+
+	double VideoTexture::VideoTextureDetail::lengthSec() const
+	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			return m_player->lengthSec();
+		}
+	# endif
+
+		return m_videoReader.getLengthSec();
 	}
 
 	const Texture& VideoTexture::VideoTextureDetail::getTexture() const noexcept
@@ -93,6 +158,23 @@ namespace s3d
 	const VideoReader& VideoTexture::VideoTextureDetail::getVideoReader() const noexcept
 	{
 		return m_videoReader;
+	}
+
+	bool VideoTexture::VideoTextureDetail::hasAudio() const noexcept
+	{
+		return static_cast<bool>(m_player);
+	}
+
+	const Audio& VideoTexture::VideoTextureDetail::getAudio() const noexcept
+	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player)
+		{
+			return m_player->audio();
+		}
+	# endif
+
+		return m_emptyAudio;
 	}
 
 	void VideoTexture::VideoTextureDetail::update(const bool skipIfBusy)
@@ -132,6 +214,11 @@ namespace s3d
 
 		m_videoReader.readFrame(m_frameImage);
 
+		uploadFrame(skipIfBusy);
+	}
+
+	void VideoTexture::VideoTextureDetail::uploadFrame(const bool skipIfBusy)
+	{
 		if (skipIfBusy)
 		{
 			if (auto& texture = m_frameTextures[!m_latestTextureIndex];
@@ -140,6 +227,7 @@ namespace s3d
 				if (texture.fillIfNotBusy(m_frameImage))
 				{
 					m_latestTextureIndex = !m_latestTextureIndex;
+					m_hasDirty = false;
 				}
 				else
 				{
@@ -150,6 +238,7 @@ namespace s3d
 			{
 				texture = DynamicTexture{ m_frameImage, (m_isSRGB ? TextureFormat::R8G8B8A8_Unorm_SRGB : TextureFormat::R8G8B8A8_Unorm) };
 				m_latestTextureIndex = !m_latestTextureIndex;
+				m_hasDirty = false;
 			}
 		}
 		else
@@ -163,8 +252,24 @@ namespace s3d
 			{
 				texture = DynamicTexture{ m_frameImage, (m_isSRGB ? TextureFormat::R8G8B8A8_Unorm_SRGB : TextureFormat::R8G8B8A8_Unorm) };
 			}
-			
+
 			m_latestTextureIndex = !m_latestTextureIndex;
+			m_hasDirty = false;
 		}
+	}
+
+	void VideoTexture::VideoTextureDetail::updateFromPlayer()
+	{
+	# if defined(SIV3D_WITH_MOVIEPLAYER)
+		if (m_player->fetchFrame(m_frameImage))
+		{
+			uploadFrame(true);
+		}
+		else if (m_hasDirty)
+		{
+			// 前回 GPU が使用中で書き込めなかったフレームを書き込み直す
+			uploadFrame(true);
+		}
+	# endif
 	}
 }

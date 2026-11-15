@@ -20,7 +20,13 @@ namespace s3d
 	VideoTexture::VideoTexture(const FilePathView path, const Loop loop, const TextureDesc desc)
 		: VideoTexture{}
 	{
-		pImpl->load(path, loop, desc);
+		pImpl->load(path, loop, PlayAudio::No, desc);
+	}
+
+	VideoTexture::VideoTexture(const FilePathView path, const Loop loop, const PlayAudio playAudio, const TextureDesc desc)
+		: VideoTexture{}
+	{
+		pImpl->load(path, loop, playAudio, desc);
 	}
 
 	bool VideoTexture::isEmpty() const noexcept
@@ -60,7 +66,7 @@ namespace s3d
 
 	double VideoTexture::lengthSec() const
 	{
-		return getVideoReader().getLengthSec();
+		return pImpl->lengthSec();
 	}
 
 	void VideoTexture::setPosSec(const double posSec) const
@@ -81,6 +87,16 @@ namespace s3d
 	const VideoReader& VideoTexture::getVideoReader() const noexcept
 	{
 		return pImpl->getVideoReader();
+	}
+
+	bool VideoTexture::hasAudio() const noexcept
+	{
+		return pImpl->hasAudio();
+	}
+
+	const Audio& VideoTexture::getAudio() const noexcept
+	{
+		return pImpl->getAudio();
 	}
 
 	int32 VideoTexture::width() const

@@ -65,6 +65,9 @@ namespace s3d
 	/// @brief ループ再生を有効にする
 	using Loop				= YesNo<struct Loop_tag>;
 
+	/// @brief 音声を再生するか
+	using PlayAudio			= YesNo<struct PlayAudio_tag>;
+
 	/// @brief Y 座標を上下反転させる
 	using FlipY				= YesNo<struct FlipY_tag>;
 

@@ -23,6 +23,8 @@ namespace s3d
 {
 	class VideoReader;
 
+	class Audio;
+
 	/// @brief 動画を Texture のように扱えるクラス
 	class VideoTexture
 	{
@@ -36,6 +38,18 @@ namespace s3d
 		/// @param loop ループするか
 		SIV3D_NODISCARD_CXX20
 		explicit VideoTexture(FilePathView path, Loop loop = Loop::Yes, TextureDesc desc = TextureDesc::Unmipped);
+
+		/// @brief 動画テクスチャを作成します。
+		/// @param path 動画ファイルのパス
+		/// @param loop ループするか
+		/// @param playAudio 動画の音声を再生するか
+		/// @param desc テクスチャの設定
+		/// @remark 音声を再生できるのは、音声トラックを持つ WebM (Vorbis / Opus) だけです (SIV3D_WITH_MOVIEPLAYER が有効なビルド)。
+		/// それ以外の動画では `PlayAudio::No` と同じになります。
+		/// @remark 音声を再生する場合、再生位置は音声の時計に従って進み、`advance()` の `deltaTimeSec` は使われません。
+		/// 一時停止や音量の変更は `getAudio()` で取得した Audio に対して行います。
+		SIV3D_NODISCARD_CXX20
+		VideoTexture(FilePathView path, Loop loop, PlayAudio playAudio, TextureDesc desc = TextureDesc::Unmipped);
 
 		[[nodiscard]]
 		bool isEmpty() const noexcept;
@@ -74,8 +88,21 @@ namespace s3d
 		[[nodiscard]]
 		operator const Texture& () const noexcept;
 
+		/// @brief 動画を読み込んでいる VideoReader を返します。
+		/// @remark 音声を再生している場合 (`hasAudio()` が true) は、動画を movie-player が直接再生するため空の VideoReader を返します。
 		[[nodiscard]]
 		const VideoReader& getVideoReader() const noexcept;
+
+		/// @brief 動画の音声を再生しているかを返します。
+		/// @return `PlayAudio::Yes` で作成し、動画が音声を持つ場合 true, それ以外の場合は false
+		[[nodiscard]]
+		bool hasAudio() const noexcept;
+
+		/// @brief 動画の音声を再生している Audio を返します。
+		/// @remark 音量やパンの変更、一時停止 (`pause()`) に使えます。一時停止すると動画も止まります。
+		/// @return 音声の Audio。`hasAudio()` が false の場合は空の Audio
+		[[nodiscard]]
+		const Audio& getAudio() const noexcept;
 
 		/// @brief 動画の幅（ピクセル）を返します。
 		/// @return 動画の幅（ピクセル）
