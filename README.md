@@ -119,6 +119,38 @@
 
 <small>* Native support for Apple Silicon is planned for Siv3D v0.8. Currently, Siv3D can be built and run using Rosetta emulation.</small>
 
+## SDL3 Port (SDL3 版)
+
+This branch adds an **SDL3 + OpenGL ES 3.0** backend that builds from a single CMake project (vcpkg + Ninja Multi-Config) on Windows, Linux and macOS.
+
+このブランチには、Windows / Linux / macOS を 1 つの CMake プロジェクト (vcpkg + Ninja Multi-Config) でビルドできる **SDL3 + OpenGL ES 3.0** バックエンドが入っています。
+
+| Platform | Build guide | Toolchain / Notes |
+|:--:|:--|:--|
+| Windows | [SDL3/BUILD-Windows.md](SDL3/BUILD-Windows.md) | Visual Studio 2026 (MSVC 14.51), `x64-windows` preset, static vcpkg libraries |
+| Linux | [SDL3/BUILD_LINUX.md](SDL3/BUILD_LINUX.md) | Built in the Steam Runtime 3.0 "sniper" SDK (glibc 2.31, gcc-14) for wide distro compatibility. No GTK / glib dependency |
+| macOS | [SDL3/BUILD-macOS.md](SDL3/BUILD-macOS.md) | Apple clang, `x64-osx` preset. OpenGL ES runs on Metal via ANGLE bundled in the `.app` |
+
+```bash
+cmake --preset <x64-windows | x64-linux | x64-osx> -DSIV3D_BUILD_SAMPLE=ON
+cmake --build build/<preset> --config Release
+```
+
+Common implementation across platforms (全 OS 共通の実装):
+
+- **Window / input / OpenGL ES context**: SDL3 (fetched with CMake FetchContent)
+- **File dialogs**: `SDL_ShowFileDialogWithProperties` (Windows common dialog / macOS NSOpenPanel / Linux xdg-desktop-portal or zenity)
+- **Trash** (`FileSystem::Remove(path, AllowUndo::Yes)`): `SHFileOperationW` / `NSFileManager` / freedesktop.org Trash spec
+- **Audio**: SoLoud + miniaudio (WASAPI / Core Audio / PulseAudio・ALSA). MP3 and FLAC are decoded with dr_mp3 / dr_flac on every platform
+- **Video** (`VideoReader` / `VideoTexture`): OpenCV (Media Foundation on Windows, AVFoundation on macOS)
+
+Known limitations (主な制限):
+
+- AAC / WMA audio files cannot be loaded; pitch shift (SoundTouch) is disabled
+- Linux: video files cannot be opened yet (OpenCV is built without a video backend)
+- macOS: only Intel (x86_64) has been tested; `arm64-osx` is untested
+- Other platform-specific limitations are listed in each build guide (詳細は各ビルド手順書を参照)
+
 ## Next Major Update
 
 The next major update, Siv3D v0.8, is under development in the following repository.
