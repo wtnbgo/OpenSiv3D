@@ -37,6 +37,21 @@ PRESET=x64-linux CMAKEOPT='-DSIV3D_BUILD_SAMPLE=ON' \
 <steamdev>/deckbuild/deckbuild.sh -s ~/OpenSiv3D configure|build|install|shell|clean
 ```
 
+### 動画まわりの CMake オプション
+
+| オプション | 既定 | 意味 |
+|---|---|---|
+| `SIV3D_WITH_FFMPEG` | ON | vcpkg の manifest feature `ffmpeg` (Linux では opencv4[ffmpeg] + ffmpeg) を有効にする。OpenCV の `VideoCapture` で MP4 (H.264 / AAC) などを開ける |
+| `SIV3D_WITH_MOVIEPLAYER` | ON | [movie-player](https://github.com/wamsoft/movie-player) (MIT、FetchContent) で WebM (VP8 / VP9 + Vorbis / Opus) を再生する。manifest feature `movieplayer` (libvpx / libogg / libyuv) を有効にする |
+
+- **`-DSIV3D_WITH_FFMPEG=OFF`**: FFmpeg を一切含まない。vcpkg から ffmpeg が外れ (opencv4 は ffmpeg 無しで
+  作り直し)、ffmpeg の .so も `licenses/ffmpeg*` も install されず、NEEDED に `libav*` が出ない。
+  WebM は movie-player で開けるが、MP4 などは開けない (`VideoReader::isOpen()` が false)
+- **`-DSIV3D_WITH_MOVIEPLAYER=OFF`**: libvpx / libyuv が vcpkg から外れ、実行ファイルにも入らない。
+  WebM は OpenCV + FFmpeg (FFmpeg 内蔵の VP9 デコーダー) で開けるが、`VideoTexture` の音声付き再生は
+  できない (`PlayAudio::Yes` でも `hasAudio()` が false)
+- オプションを変えたら `cmake --preset ...` からやり直す (vcpkg が依存を追加 / 削除する)
+
 - 初回の configure は vcpkg の依存 (boost / opencv4 / curl など) のビルドで時間がかかる。
   バイナリキャッシュは docker volume (`deckbuild-cache`) に残るので 2 回目以降は速い
 - configure は FetchContent で SDL3 を取得するのでネットワークが必要
@@ -105,11 +120,16 @@ done
 
 | 項目 | Siv3DApp | libSDL3.so.0 |
 |---|---|---|
-| GLIBC 最大 | 2.29 | 2.30 |
+| GLIBC 最大 | 2.30 | 2.30 |
 | GLIBCXX 依存 | なし | なし |
 | GCC_ シンボル最大 | 4.2.0 | - |
 | RPATH | `$ORIGIN` (DT_RPATH) | - |
 | `_Unwind_RaiseException` の定義 | 0 | - |
+
+Siv3DApp の GLIBC 2.30 は `pthread_cond_clockwait` (静的リンクした libstdc++ の、時間指定付きの
+`std::condition_variable` 待ち) から来ている。movie-player (WebM) の導入で使われるようになった
+(それまでは 2.29)。基準の 2.31 以下に収まっている。
+libvpx / libyuv は静的リンク (`vpx_codec_decode` / `I420ToARGB` が実行ファイル内にあり、NEEDED は増えない)。
 
 同梱 ffmpeg (7.1.1): GLIBC 最大 2.29 (libavformat は 2.28)、GLIBCXX 依存なし、RPATH / RUNPATH なし。
 
@@ -156,6 +176,13 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
 - **ffmpeg のビルド**: x86 の asm に nasm を使う (steamdev のイメージに入っている)。所要時間は
   ffmpeg 約 4 分 + opencv4 の再ビルド約 6 分 (overlay triplet の導入で triplet の ABI が変わるため、
   初回はバイナリキャッシュに無い依存も作り直しになる。全体で約 20 分)
+- **WebM は movie-player**: `VideoReader` はファイルが EBML (WebM) のとき、movie-player の
+  WebmExtractor / VpxDecoder で 1 フレームずつ読む (それ以外は OpenCV)。`VideoTexture(path, Loop, PlayAudio::Yes)`
+  では、音声トラックがある WebM を movie-player の IMoviePlayer で映像と音声を同期再生し、音声は
+  Siv3D の `Audio` (miniaudio) から鳴らす (`hasAudio()` / `getAudio()`、`getAudio().pause()` で映像も止まる)。
+  トラック構成 (映像 VP8 / VP9、音声 Vorbis / Opus、チャンネル数・サンプリング周波数) はログに出る
+  (例: `video: VP9 1920x1080, audio: Opus 2ch 48000Hz`)。libvpx / libogg / libyuv は vcpkg の静的ライブラリ。
+  vcpkg のビルド時間は libvpx 約 40 秒 + libyuv 約 10 秒 (x86 の asm に nasm を使う)
 
 ## 既知の制限・注意点
 
@@ -163,10 +190,13 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
   ffmpeg のライセンス文 (`ffmpeg.txt`) と、ソースの入手先 (`ffmpeg-source.txt`。FFmpeg n7.1.1 の
   ソースと vcpkg のポート `ffmpeg` 7.1.1#6 のコミット) が自動で入る。アプリを配布するときは
   `licenses/` ごと同梱すること。.so を差し替えて動かせる形 (共有ライブラリ) なので、再リンクの要件も満たす
-- **画面がスリープ中 (スクリーンセーバー動作中) の X11 では起動直後に止まる**:
-  コンポジタがフレームを表示しないため、垂直同期付きの `SwapBuffers`
-  (`X11_GL_SwapWindow` → Mesa DRI3) が返らない。Wayland では SDL3 がフレーム待ちに
-  タイムアウトを持つので進む。画面を復帰させてから実行する
+- **画面がスリープ中 (スクリーンセーバー動作中) は描画が止まる / 遅くなる**:
+  コンポジタがフレームを表示しないため、
+  - X11 では垂直同期付きの `SwapBuffers` (`X11_GL_SwapWindow` → Mesa DRI3) が返らず、起動直後に止まる
+  - Wayland ではフレームコールバックが来ず、SDL3 が約 50ms ごとに待ちを打ち切るので約 20fps に落ちる
+    (`Wayland_WaitForSwapInterval` で待っている。動画の再生位置は時刻で進むので映像はコマ落ちする)
+
+  フレームレートや動画の確認は画面を復帰させてから行う
   (吉里吉里Z でも、画面スリープ中の Wayland 起動で SDL3 初期化が落ちる事例がある)
 - ビルド後に `resources/` と `example/` が実行ファイルの隣 (`SDL3/App/Release/`) にも
   コピーされるので、ビルドツリーでも起動できる (`SDL3/App/Release` に移動してから起動)
@@ -187,6 +217,8 @@ Linux の配布物 (`Siv3DApp` と同梱 .so) に入るものを、LGPL / GPL �
 | 対象 | 扱い | ライセンス | 判断 |
 |---|---|---|---|
 | ffmpeg 7.1.1 (avcodec / avformat / avutil / swresample / swscale) | 共有ライブラリで同梱 | **LGPL 2.1 以降** | 各 .so の `*_license()` 文字列が "LGPL version 2.1 or later"。configure に `--enable-gpl` / `--enable-nonfree` / `--enable-version3` も外部コーデックライブラリ (`--enable-lib*`) も無いことを、`libavcodec` に埋め込まれた configure 行で確認。ライセンス文とソースの入手先は `licenses/` に同梱 |
+| movie-player | 静的 (FetchContent) | MIT | 問題なし |
+| libvpx / libyuv | 静的 | BSD-3-Clause | 問題なし (`SIV3D_WITH_MOVIEPLAYER=OFF` なら含まれない) |
 | freetype | 静的 | FTL / GPLv2 の選択制 | FTL を選べる (問題なし) |
 | liblzma (xz) | 静的 | 0BSD | LGPL は getopt_long を持たない環境の CLI 用だけで、ライブラリには含まれない |
 | zstd | 静的 | BSD / GPLv2 の選択制 | BSD を選べる |
@@ -199,6 +231,7 @@ Linux の配布物 (`Siv3DApp` と同梱 .so) に入るものを、LGPL / GPL �
 | `Siv3D/src/ThirdParty`, `Siv3D/include/ThirdParty` | 静的 | — | LGPL / GPL の記載なし。SoundTouch (LGPL) は `NullSoundTouchFunctions` の空実装で、本体は含まれない |
 
 結論: LGPL / GPL のもので配布物に入るのは ffmpeg (LGPL 2.1+、共有ライブラリ) だけ。
+`SIV3D_WITH_FFMPEG=OFF` なら LGPL / GPL のものは配布物に入らない。
 
 ## 動作確認
 
@@ -226,3 +259,19 @@ libpulse が実行時に読み込まれ、MP3 (`example/test.mp3`, 103.42 秒) �
 205.70 秒) が読めて、再生位置が進む (2 秒後に posSec 2.0) ことを確認した。
 動画は `example/video/river.mp4` が開け (1280x720, 29.97fps, 752 フレーム)、`readFrame` で
 1280x720 の画像が得られることを確認した (Windows と同じ結果)。
+
+WebM (movie-player、`title.webm`: VP9 1920x1080 + Vorbis 2ch 48kHz、97.90 秒) は 2026-11-15 に確認した。
+- `VideoReader`: open=true、30.000fps (DefaultDuration の無いファイルでも movie-player ba267f3 以降は
+  推定せずに 30)、2937 フレーム、60 フレームの読み込み 0.113 秒、300 フレーム目へのシークも可、
+  保存したフレームの色も正しい。`VideoTexture` (音声なし) も再生位置が進む
+- `VideoTexture(PlayAudio::Yes)`: hasAudio=true。3 秒後に posSec 3.03 / audioPos 3.01、`getAudio().pause()` で
+  映像も止まり (1 秒後も 3.04)、`setPosSec(60.0)` でシークできる (終了時 64.52)。画面が点いている状態で 60fps。
+  `PlayAudio` を指定しない場合や MP4 では hasAudio=false で、従来どおり VideoReader で再生する
+- Opus: `title.webm` の映像はそのまま音声だけ Opus に変えた 20 秒のファイル (2ch 128kbps / 1ch 64kbps、
+  OpusHead の pre-skip 312、CodecDelay / SeekPreRoll あり) で、ログに `audio: Opus 2ch 48000Hz` /
+  `audio: Opus 1ch 48000Hz` と出て、hasAudio=true、4 秒後に posSec 3.99 / audioPos 3.98
+- `-DSIV3D_WITH_FFMPEG=OFF`: WebM は開け、MP4 は開けない。同梱 .so は libSDL3 だけで `licenses/` も無い
+- `-DSIV3D_WITH_MOVIEPLAYER=OFF`: WebM は OpenCV + FFmpeg で開け (2937 フレーム、シーク可)、
+  `PlayAudio::Yes` でも hasAudio=false
+
+実際に音が聞こえるか、映像と音声がずれていないか (Opus の先頭の無音を含む) は、ユーザーの確認待ち。
