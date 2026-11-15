@@ -1157,6 +1157,55 @@ if(SIV3D_BUILD_SAMPLE)
     if(SIV3D_LINUX_FFMPEG_LIBS)
       # soname のリンク (libavcodec.so.61 → libavcodec.so.61.x.y) もそのまま置く
       install(FILES ${SIV3D_LINUX_FFMPEG_LIBS} DESTINATION .)
+
+      # LGPL の配布条件: ffmpeg のライセンス文と、使った ffmpeg のソースの入手先を同梱する
+      #   licenses/ffmpeg.txt        ライセンス文 (vcpkg の share/ffmpeg/copyright = LGPL 2.1)
+      #   licenses/ffmpeg-source.txt バージョン・ソースの場所・vcpkg のポート (vcpkg.spdx.json から生成)
+      set(SIV3D_LINUX_FFMPEG_SHARE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/ffmpeg")
+      set(SIV3D_LINUX_LICENSE_DIR "${CMAKE_CURRENT_BINARY_DIR}/licenses")
+      file(MAKE_DIRECTORY "${SIV3D_LINUX_LICENSE_DIR}")
+      configure_file("${SIV3D_LINUX_FFMPEG_SHARE}/copyright" "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg.txt" COPYONLY)
+
+      set(SIV3D_FFMPEG_PORT_VERSION "unknown")
+      set(SIV3D_FFMPEG_PORT_SOURCE "unknown")
+      set(SIV3D_FFMPEG_UPSTREAM_SOURCE "unknown")
+      if(EXISTS "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json")
+        file(READ "${SIV3D_LINUX_FFMPEG_SHARE}/vcpkg.spdx.json" _spdx)
+        string(JSON _count LENGTH "${_spdx}" packages)
+        math(EXPR _last "${_count} - 1")
+        foreach(i RANGE ${_last})
+          string(JSON _name GET "${_spdx}" packages ${i} name)
+          string(JSON _loc ERROR_VARIABLE _err GET "${_spdx}" packages ${i} downloadLocation)
+          if(_name STREQUAL "ffmpeg")
+            string(JSON SIV3D_FFMPEG_PORT_VERSION GET "${_spdx}" packages ${i} versionInfo)
+            set(SIV3D_FFMPEG_PORT_SOURCE "${_loc}")
+          elseif(_name STREQUAL "ffmpeg/ffmpeg")
+            set(SIV3D_FFMPEG_UPSTREAM_SOURCE "${_loc}")
+          endif()
+        endforeach()
+      endif()
+      file(WRITE "${SIV3D_LINUX_LICENSE_DIR}/ffmpeg-source.txt"
+"FFmpeg (libavcodec / libavformat / libavutil / libswresample / libswscale)
+
+This application uses FFmpeg libraries licensed under the GNU Lesser General
+Public License version 2.1 or later (see ffmpeg.txt). The libraries are shipped
+as separate shared libraries (lib*.so.*) next to the executable and can be
+replaced with compatible builds.
+
+FFmpeg was configured without --enable-gpl, --enable-nonfree and
+--enable-version3, and without external codec libraries.
+
+Source code:
+  FFmpeg source : ${SIV3D_FFMPEG_UPSTREAM_SOURCE}
+                  (https://ffmpeg.org/download.html)
+  Build recipe  : vcpkg port \"ffmpeg\" ${SIV3D_FFMPEG_PORT_VERSION}
+                  ${SIV3D_FFMPEG_PORT_SOURCE}
+                  features: avcodec, avformat, swresample, swscale (shared libraries)
+")
+      install(DIRECTORY "${SIV3D_LINUX_LICENSE_DIR}/" DESTINATION licenses)
+      add_custom_command(TARGET Siv3DApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${SIV3D_LINUX_LICENSE_DIR}" $<TARGET_FILE_DIR:Siv3DApp>/licenses
+      )
       foreach(lib IN LISTS SIV3D_LINUX_FFMPEG_LIBS)
         add_custom_command(TARGET Siv3DApp POST_BUILD
           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${lib}" $<TARGET_FILE_DIR:Siv3DApp>

@@ -60,6 +60,8 @@ bin/x64-linux/Release/
                            同梱 ffmpeg (LGPL、共有ライブラリ。soname のリンクと実体)
   resources/engine/        エンジン資材 (フォント / シェーダ (essl) / テクスチャ / サウンドフォント)
   example/                 サンプル資材
+  licenses/ffmpeg.txt      ffmpeg のライセンス文 (LGPL 2.1)
+  licenses/ffmpeg-source.txt  ffmpeg のバージョン・ソースの入手先・vcpkg のポート (configure 時に生成)
   lib/ include/            Siv3D 静的ライブラリと公開ヘッダ (アプリを別途ビルドする場合用)
 ```
 
@@ -157,10 +159,10 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
 
 ## 既知の制限・注意点
 
-- **ffmpeg (LGPL) の配布条件**: アプリを配布するときは、ffmpeg のライセンス文
-  (`build/x64-linux/vcpkg_installed/x64-linux/share/ffmpeg/copyright`) を同梱し、使った ffmpeg の
-  ソース (vcpkg の port とバージョン、7.1.1) を入手できるようにすること。.so を差し替えて動かせる
-  形 (共有ライブラリ) にしてあるので、再リンクの要件はこれで満たせる
+- **ffmpeg (LGPL) の配布条件**: install 先 (とビルドツリーの実行ファイルの隣) の `licenses/` に
+  ffmpeg のライセンス文 (`ffmpeg.txt`) と、ソースの入手先 (`ffmpeg-source.txt`。FFmpeg n7.1.1 の
+  ソースと vcpkg のポート `ffmpeg` 7.1.1#6 のコミット) が自動で入る。アプリを配布するときは
+  `licenses/` ごと同梱すること。.so を差し替えて動かせる形 (共有ライブラリ) なので、再リンクの要件も満たす
 - **画面がスリープ中 (スクリーンセーバー動作中) の X11 では起動直後に止まる**:
   コンポジタがフレームを表示しないため、垂直同期付きの `SwapBuffers`
   (`X11_GL_SwapWindow` → Mesa DRI3) が返らない。Wayland では SDL3 がフレーム待ちに
@@ -175,6 +177,28 @@ Linux 固有の処理は `if(UNIX AND NOT APPLE)` で分岐している。
   ファイルシステム種別 (tmpfs / proc / overlay など) とマウントポイント (`/`・`/tmp`・`/var` など) で行う
 - sniper SDK イメージはローリング更新される。再現性を厳密にしたい場合は
   steamdev の Dockerfile の `FROM` をダイジェスト固定にする
+
+## 依存ライブラリのライセンス
+
+Linux の配布物 (`Siv3DApp` と同梱 .so) に入るものを、LGPL / GPL の観点で確認した結果
+(2026-11-15、vcpkg の `share/*/copyright` を `Lesser|LGPL|GPL` で検索し、実際に `Siv3DApp` の
+リンク行に載るライブラリ・sniper SDK から静的リンクするもの・実行時に dlopen するものを確認)。
+
+| 対象 | 扱い | ライセンス | 判断 |
+|---|---|---|---|
+| ffmpeg 7.1.1 (avcodec / avformat / avutil / swresample / swscale) | 共有ライブラリで同梱 | **LGPL 2.1 以降** | 各 .so の `*_license()` 文字列が "LGPL version 2.1 or later"。configure に `--enable-gpl` / `--enable-nonfree` / `--enable-version3` も外部コーデックライブラリ (`--enable-lib*`) も無いことを、`libavcodec` に埋め込まれた configure 行で確認。ライセンス文とソースの入手先は `licenses/` に同梱 |
+| freetype | 静的 | FTL / GPLv2 の選択制 | FTL を選べる (問題なし) |
+| liblzma (xz) | 静的 | 0BSD | LGPL は getopt_long を持たない環境の CLI 用だけで、ライブラリには含まれない |
+| zstd | 静的 | BSD / GPLv2 の選択制 | BSD を選べる |
+| SDL3 (同梱 .so) | 共有 | zlib | hidapi は GPLv3 / BSD / HIDAPI の選択制で BSD を選べる |
+| libuuid (sniper SDK の `libuuid.a`) | 静的 | BSD-3-Clause (util-linux の `libuuid/*`) | 問題なし |
+| libstdc++ / libgcc の静的部分 (gcc-14) | 静的 | GPLv3 + GCC Runtime Library Exception | 例外により配布物にライセンス上の制約は及ばない |
+| libgcc_s.so.1 / glibc | OS のものを使う (同梱しない) | GPLv3+例外 / LGPL 2.1 | 同梱しないので配布物には入らない |
+| 音声 (libpulse / libasound / libjack / PipeWire)・libdecor / Wayland / X11 など | SDL3 / miniaudio が実行時に dlopen (同梱しない) | — | OS 側のライブラリ。install 先の .so は libSDL3 と ffmpeg の 5 本だけ |
+| その他の vcpkg 静的ライブラリ (opencv4, libpng, libjpeg-turbo, libtiff, libwebp, giflib, harfbuzz, curl, OpenSSL 3, brotli, bzip2, zlib, ogg / vorbis / opus, quirc, boost) | 静的 | Apache-2.0 / BSD / MIT / zlib 系 | copyright に LGPL / GPL の記載なし |
+| `Siv3D/src/ThirdParty`, `Siv3D/include/ThirdParty` | 静的 | — | LGPL / GPL の記載なし。SoundTouch (LGPL) は `NullSoundTouchFunctions` の空実装で、本体は含まれない |
+
+結論: LGPL / GPL のもので配布物に入るのは ffmpeg (LGPL 2.1+、共有ライブラリ) だけ。
 
 ## 動作確認
 
