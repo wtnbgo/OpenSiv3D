@@ -142,12 +142,12 @@ Common implementation across platforms (全 OS 共通の実装):
 - **File dialogs**: `SDL_ShowFileDialogWithProperties` (Windows common dialog / macOS NSOpenPanel / Linux xdg-desktop-portal or zenity)
 - **Trash** (`FileSystem::Remove(path, AllowUndo::Yes)`): `SHFileOperationW` / `NSFileManager` / freedesktop.org Trash spec
 - **Audio**: SoLoud + miniaudio (WASAPI / Core Audio / PulseAudio・ALSA). MP3 and FLAC are decoded with dr_mp3 / dr_flac on every platform
-- **Video** (`VideoReader` / `VideoTexture`): OpenCV (Media Foundation on Windows, AVFoundation on macOS)
+- **Video** (`VideoReader` / `VideoTexture`): OpenCV (Media Foundation on Windows, AVFoundation on macOS, FFmpeg on Linux — LGPL build bundled as shared libraries)
 
 Known limitations (主な制限):
 
 - AAC / WMA audio files cannot be loaded; pitch shift (SoundTouch) is disabled
-- Linux: video files cannot be opened yet (OpenCV is built without a video backend)
+- Linux: `FileSystem::Remove(path, AllowUndo::Yes)` fails on system-internal mounts such as tmpfs `/tmp` (same as GIO)
 - macOS: only Intel (x86_64) has been tested; `arm64-osx` is untested
 - Other platform-specific limitations are listed in each build guide (詳細は各ビルド手順書を参照)
 
