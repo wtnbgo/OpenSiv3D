@@ -19,13 +19,17 @@
 #   --target T       windows / linux / macos (既定: 実行中の OS)
 #   --config C       Release / Debug / RelWithDebInfo (既定: Release)
 #   --native         linux: コンテナを使わずホストで直接ビルドする
-#   --container IMG  linux: ビルドに使う docker イメージ (既定: siv3d-app.json の linux.container)
+#   --container IMG  linux: ビルドに使うコンテナイメージ (既定: siv3d-app.json の linux.container)
+#   --engine E       linux: コンテナの実行に使うコマンド auto / docker / wslc / podman
+#                    (既定: siv3d-app.json の linux.engine、無ければ auto =
+#                     docker のデーモンが動いていれば docker、Windows で動いていなければ wslc)
 #
 # 機種とビルドするホスト:
 #   windows : Windows (Visual Studio 2022 以降。開発者環境でなければ vswhere で探して読み込む)
 #   macos   : macOS (Xcode Command Line Tools)
-#   linux   : Linux (ホストでも可) / Windows・macOS では docker の sniper SDK コンテナ
-#             (steamdev の deckbuild-sniper イメージ。SDL3/BUILD_LINUX.md を参照)
+#   linux   : sniper SDK のコンテナ (steamdev の deckbuild-sniper イメージ。SDL3/BUILD_LINUX.md を参照)。
+#             Windows は docker または WSL のコンテナ (wslc)、macOS / Linux は docker。
+#             Linux ホストでは --native でホストのコンパイラでもビルドできる
 # -----------------------------------------------------------------------------
 
 import argparse
@@ -241,26 +245,57 @@ def info(app):
 # Linux のコンテナビルド (Windows / macOS ホスト、または Linux ホストで --native 無し)
 # -----------------------------------------------------------------------------
 
+def find_wslc():
+    exe = shutil.which("wslc")
+    if exe:
+        return exe
+    path = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "WSL" / "wslc.exe"
+    return str(path) if path.exists() else None
+
+
+def container_engine(requested):
+    """コンテナの実行コマンド (docker / wslc) を返す"""
+    if requested and requested != "auto":
+        exe = find_wslc() if requested == "wslc" else shutil.which(requested)
+        if not exe:
+            fail(f"container engine not found: {requested}")
+        return exe
+
+    # docker のデーモンが動いていれば docker、Windows で動いていなければ WSL のコンテナ (wslc)
+    docker = shutil.which("docker")
+    if docker and subprocess.run([docker, "info"], capture_output=True).returncode == 0:
+        return docker
+    if platform.system() == "Windows":
+        wslc = find_wslc()
+        if wslc:
+            return wslc
+    fail("no container engine (docker daemon is not running, wslc not found). Use --native on a Linux host.")
+
+
 def run_in_container(app, args, commands):
     image = args.container or app.target_json.get("container", "deckbuild-sniper")
-    if not shutil.which("docker"):
-        fail("docker not found (use --native on a Linux host)")
+    engine = container_engine(args.engine or app.target_json.get("engine"))
+    log(f"container: {engine} / {image}")
 
     # アプリと OpenSiv3D をコンテナの固定パスにマウントし、コンテナ内でこのスクリプトを --native で動かす。
-    # vcpkg のバイナリキャッシュは名前付きボリュームに残す
-    inner = ["python3", "/siv3d/tools/siv3d_app.py", "--native", "--target", "linux",
-             "--config", app.config, "--project", "/app"] + commands
-    cmd = ["docker", "run", "--rm",
+    # コンパイラ・vcpkg のバイナリキャッシュ (名前付きボリューム deckbuild-cache) は steamdev の
+    # deckbuild.sh と同じ設定にする (sniper SDK の既定の gcc は古いので gcc-14 を使う)
+    inner = " ".join(["mkdir -p /cache/vcpkg-bincache &&",
+                      "python3", "/siv3d/tools/siv3d_app.py", "--native", "--target", "linux",
+                      "--config", app.config, "--project", "/app"] + commands)
+    cmd = [engine, "run", "--rm",
            "-v", f"{app.project_dir}:/app",
            "-v", f"{SIV3D_BASE}:/siv3d",
-           "-v", "siv3d-vcpkg-cache:/root/.cache/vcpkg",
+           "-v", "deckbuild-cache:/cache",
+           "-e", "VCPKG_DEFAULT_BINARY_CACHE=/cache/vcpkg-bincache",
+           "-e", "CC=gcc-14", "-e", "CXX=g++-14",
            "-w", "/app",
-           image] + inner
+           image, "bash", "-c", inner]
     run(cmd)
 
     # コンテナは root で動くので、Linux ホストではビルド結果の所有者を戻す
     if platform.system() == "Linux" and hasattr(os, "getuid"):
-        run(["docker", "run", "--rm", "-v", f"{app.build_dir}:/out", image,
+        run([engine, "run", "--rm", "-v", f"{app.build_dir}:/out", image,
              "chown", "-R", f"{os.getuid()}:{os.getgid()}", "/out"])
 
 
@@ -275,6 +310,7 @@ def main():
     parser.add_argument("--config", default="Release")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--container")
+    parser.add_argument("--engine", choices=["auto", "docker", "wslc", "podman"])
     args = parser.parse_args()
 
     app = App(args.project, args.target, args.config)
