@@ -274,4 +274,6 @@ WebM (movie-player、`title.webm`: VP9 1920x1080 + Vorbis 2ch 48kHz、97.90 秒)
 - `-DSIV3D_WITH_MOVIEPLAYER=OFF`: WebM は OpenCV + FFmpeg で開け (2937 フレーム、シーク可)、
   `PlayAudio::Yes` でも hasAudio=false
 
-実際に音が聞こえるか、映像と音声がずれていないか (Opus の先頭の無音を含む) は、ユーザーの確認待ち。
+実際の音も確認した (2026-11-15、PipeWire 環境のスピーカー): `title.webm` (Vorbis 2ch)・Opus 2ch・Opus 1ch の
+3 本とも音が聞こえ、映像と音声のずれは感じられなかった (Opus の先頭の無音 (pre-skip) によるずれも無し)。
+このとき 4 秒後の映像 / 音声の再生位置は 4.03 / 4.02 秒 (Opus 1ch は 4.02 / 4.01 秒)。
