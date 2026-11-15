@@ -74,6 +74,8 @@ Siv3DApp.app/Contents/
 
 ### その他
 
+- 音声は soloud の miniaudio バックエンド (Core Audio) で再生します。miniaudio は既定ではフレームワークを相対パスで実行時に読み込もうとしますが、現行の macOS では解決できず NoSound にフォールバックしてしまうため、`MA_NO_RUNTIME_LINKING` を定義し、CoreAudio / AudioToolbox / AudioUnit を直接リンクしています。起動ログに `Audio backend: MiniAudio` と出れば有効です。
+- 動画 (`VideoReader`) は OpenCV (macOS では AVFoundation バックエンド) で読み込みます。
 - `DirectoryWatcher` は FSEvents による実装です (旧 `Siv3D-Platform/macOS` の実装を移植)。
 - ファイルダイアログは SDL3 (`SDL_ShowFileDialogWithProperties`、NSOpenPanel / NSSavePanel) を使います。
   - SDL のアプリメニューには Edit メニューが無いため、ダイアログ表示中だけ標準の Edit メニューを追加し、パネル内で ⌘A / ⌘C / ⌘V / ⌘X / ⌘Z を効かせています (`SivDialog_SDL3_macOS.mm`)。常設にしないのは、ゲームウィンドウ側の ⌘C / ⌘V がメニューに取られて Siv3D のキー入力に届かなくなるのを避けるためです。
@@ -84,5 +86,4 @@ Siv3DApp.app/Contents/
 
 - 確認済みなのは Intel Mac (x86_64) の Release ビルドだけです。`arm64-osx` プリセットは用意してありますが、ビルドは未確認です (`Platform.hpp` は macOS を常に SSE ありとして扱うため、arm64 では対応が必要になる見込みです)。
 - 起動時に `OpenGL Error: 0x500` (GL_INVALID_ENUM) が 1 回だけログに出ます。描画には影響ありません (原因は未調査)。
-- 音声は `WITH_NOSOUND` (NoSound バックエンド) です (他のプラットフォームと同じ)。
 - コード署名・公証は行っていません。配布するには別途 `codesign` が必要です。

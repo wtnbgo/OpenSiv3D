@@ -990,6 +990,10 @@ if(APPLE)
     "-framework CoreServices"
     "-framework CoreFoundation"
     "-framework IOKit"
+    # soloud の miniaudio バックエンド (MA_NO_RUNTIME_LINKING)
+    "-framework CoreAudio"
+    "-framework AudioToolbox"
+    "-framework AudioUnit"
   )
 endif()
 target_compile_features(Siv3D PRIVATE cxx_std_20 c_std_11)

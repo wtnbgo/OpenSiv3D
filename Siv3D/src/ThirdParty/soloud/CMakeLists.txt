@@ -57,6 +57,12 @@ target_compile_definitions(Siv3D_ThirdParty_soloud PRIVATE
   WITH_MINIAUDIO
   WITH_NOSOUND
 )
+if(APPLE)
+  # miniaudio 0.10 は CoreAudio 系フレームワークを相対パス ("CoreFoundation.framework/CoreFoundation" など) で
+  # dlopen するが、現行の macOS では解決できず "No backend" になり NoSound にフォールバックする。
+  # 実行時リンクをやめてフレームワークを直接リンクする (リンクはトップの CMakeLists.txt で Siv3D に追加)
+  target_compile_definitions(Siv3D_ThirdParty_soloud PRIVATE MA_NO_RUNTIME_LINKING)
+endif()
 set_target_properties(Siv3D_ThirdParty_soloud PROPERTIES
   CXX_EXTENSIONS OFF
   C_EXTENSIONS OFF
