@@ -161,6 +161,9 @@ xdg-desktop-portal の FileChooser を模したテスト用サービスと偽の
 複数選択・フォルダ選択・初期フォルダ / 保存ファイル名・戻り値 (空白や日本語を含むパス) が
 正しく受け渡されることを確認した。キャンセル時と、portal も zenity も無い環境では
 `none` (空配列) が返り、落ちない。
+ダイアログ表示中に SIGTERM を送ると、待機を打ち切って `none` で戻り、終了コード 0 で終了する
+(SDL3 には表示中のダイアログを閉じる API が無いので、portal は D-Bus の切断で閉じ、
+zenity は自プロセスの子だけを SIGKILL で閉じる。zenity は SIGTERM をブロックした状態で起動されるため)。
 ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) はホームのゴミ箱
 (`~/.local/share/Trash/files` と `info/*.trashinfo`) に入り、`gio trash --list` に表示され、
 `gio trash --restore` (GNOME の「ゴミ箱」と同じ GVfs) で元に戻せることを確認した。

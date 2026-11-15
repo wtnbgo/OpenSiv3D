@@ -76,6 +76,8 @@ Siv3DApp.app/Contents/
 
 - `DirectoryWatcher` は FSEvents による実装です (旧 `Siv3D-Platform/macOS` の実装を移植)。
 - ファイルダイアログは SDL3 (`SDL_ShowFileDialogWithProperties`、NSOpenPanel / NSSavePanel) を使います。
+  - SDL のアプリメニューには Edit メニューが無いため、ダイアログ表示中だけ標準の Edit メニューを追加し、パネル内で ⌘A / ⌘C / ⌘V / ⌘X / ⌘Z を効かせています (`SivDialog_SDL3_macOS.mm`)。常設にしないのは、ゲームウィンドウ側の ⌘C / ⌘V がメニューに取られて Siv3D のキー入力に届かなくなるのを避けるためです。
+  - ダイアログ表示中に終了要求 (⌘Q / SIGTERM など) が来ると、パネルをキャンセルして空の結果で戻り、アプリは通常どおり終了します。終了処理中のフレームで続けて開かれたダイアログは表示しません。
 - ゴミ箱 (`FileSystem::Remove(path, AllowUndo::Yes)`) は `NSFileManager trashItemAtURL` による実装 (`SivFileSystem_SDL3_macOS.mm`) です。このため CMake で `OBJCXX` 言語を有効にしています。Cocoa / CoreServices / IOKit などのフレームワークをリンクしています。
 
 ## 既知の制限・注意点
