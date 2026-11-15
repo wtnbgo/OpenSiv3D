@@ -47,7 +47,19 @@
         "webp",
         "tiff",
         "quirc",
-        "thread"
+        "thread",
+        "ffmpeg"
+      ],
+      "platform": "linux"
+    },
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "swresample",
+        "swscale"
       ],
       "platform": "linux"
     },
