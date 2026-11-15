@@ -16,8 +16,13 @@
 #include "infoware/detail/scope.hpp"
 #include "infoware/system.hpp"
 #include <cstring>
-// Android (bionic) には wordexp が無いので、デバイス数は数えない (0 を返す)
-#if !defined(__ANDROID__)
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+// [Siv3D] Android (bionic) と iOS には wordexp が無い (数えるのは Linux の /dev/input なので常に 0 を返す)
+#if defined(__ANDROID__) || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+#define SIV3D_INFOWARE_NO_WORDEXP 1
+#else
 #include <wordexp.h>
 #endif
 
@@ -48,7 +53,7 @@ public:
 
 // http://man7.org/linux/man-pages/man3/wordexp.3.html
 static std::size_t count_expansions([[maybe_unused]] const char* of) noexcept {
-#if defined(__ANDROID__)
+#ifdef SIV3D_INFOWARE_NO_WORDEXP
 	return 0;
 #else
 	wordexp_t exp{};

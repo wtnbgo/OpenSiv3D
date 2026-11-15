@@ -16,7 +16,8 @@
 #
 # オプション:
 #   --project DIR    アプリのフォルダ (siv3d-app.json がある場所。既定: カレントディレクトリ)
-#   --target T       windows / linux / macos / web / android (既定: 実行中の OS)
+#   --target T       windows / linux / macos / ios / web / android (既定: 実行中の OS)
+#   --sdk S          ios: simulator (既定。ホストの CPU 向け) / device (arm64 の実機)
 #   --config C       Release / Debug / RelWithDebInfo (既定: Release)
 #   --native         linux: コンテナを使わずホストで直接ビルドする (出力は build/linux-native)
 #   --container IMG  linux: ビルドに使うコンテナイメージ (既定: siv3d-app.json の linux.container)
@@ -27,6 +28,8 @@
 # 機種とビルドするホスト:
 #   windows : Windows (Visual Studio 2022 以降。開発者環境でなければ vswhere で探して読み込む)
 #   macos   : macOS (Xcode Command Line Tools)
+#   ios     : macOS (Xcode)。CMake の Xcode ジェネレータでビルドし、simulator は simctl で起動する。
+#             package は simulator なら .app の zip、device なら .ipa (署名は ios.team と Xcode の自動署名)
 #   web     : どのホストでも (emsdk。環境変数 EMSDK)。出力は <exeName>.html / .js / .wasm / .data と serve.py
 #   android : どのホストでも (Android SDK / NDK / JDK 17 以上)。外枠 siv3d_and (OpenSiv3D の隣、または
 #             環境変数 SIV3D_ANDROID) の Gradle でビルドする。出力は <exeName>.apk (package で aab も可)
@@ -47,7 +50,7 @@ import zipfile
 from pathlib import Path
 
 SIV3D_BASE = Path(__file__).resolve().parent.parent
-TARGETS = ("windows", "linux", "macos", "web", "android")
+TARGETS = ("windows", "linux", "macos", "ios", "web", "android")
 
 
 def log(message):
@@ -87,10 +90,11 @@ def run(cmd, cwd=None, env=None):
 # -----------------------------------------------------------------------------
 
 class App:
-    def __init__(self, project_dir, target, config, build_name=None):
+    def __init__(self, project_dir, target, config, sdk="simulator", build_name=None):
         self.project_dir = Path(project_dir).resolve()
         self.target = target
         self.config = config
+        self.sdk = sdk
 
         config_path = self.project_dir / "siv3d-app.json"
         if not config_path.exists():
@@ -105,6 +109,11 @@ class App:
         # linux: ホストで直接ビルドする場合 (--native) はコンテナのビルドツリー (パスが /app/... ) と
         # 混ざらないよう build/linux-native を使う
         self.build_dir = self.project_dir / "build" / (build_name or target)
+        if target == "ios":
+            # simulator はホストの CPU (Intel Mac は x86_64、Apple Silicon は arm64)、device は arm64
+            self.ios_arch = "arm64" if sdk == "device" else ("x86_64" if platform.machine() == "x86_64" else "arm64")
+            self.ios_sysroot = "iphoneos" if sdk == "device" else "iphonesimulator"
+            self.build_dir = self.project_dir / "build" / "ios" / f"{sdk}-{self.ios_arch}"
         self.cmake_dir = self.build_dir / "cmake"
         self.dist_dir = self.build_dir / "dist"
         self.package_dir = self.build_dir / "package"
@@ -115,6 +124,8 @@ class App:
         return [f"-D{k}={v}" for k, v in options.items()]
 
     def packages(self):
+        if self.target == "ios":
+            return self.target_json.get("package", ["ipa"] if self.sdk == "device" else ["zip"])
         default = {"windows": ["zip"], "linux": ["tar.gz"], "macos": ["zip"], "web": ["zip"], "android": ["apk"]}[self.target]
         return self.target_json.get("package", default)
 
@@ -127,6 +138,8 @@ class App:
             return self.dist_dir / f"{self.exe_name}.exe"
         if self.target == "macos":
             return self.dist_dir / f"{self.exe_name}.app" / "Contents" / "MacOS" / self.exe_name
+        if self.target == "ios":
+            return self.dist_dir / f"{self.exe_name}.app"
         return self.dist_dir / self.exe_name
 
 
@@ -171,6 +184,18 @@ def check_vcpkg():
 
 def configure(app, env):
     check_vcpkg()
+    if app.target == "ios":
+        deployment = app.target_json.get("deploymentTarget", "15.0")
+        cmd = ["cmake", "-S", app.project_dir, "-B", app.cmake_dir,
+               "-G", "Xcode",
+               "-DCMAKE_SYSTEM_NAME=iOS",
+               f"-DCMAKE_OSX_SYSROOT={app.ios_sysroot}",
+               f"-DCMAKE_OSX_ARCHITECTURES={app.ios_arch}",
+               f"-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment}",
+               f"-DSIV3D_BASE={SIV3D_BASE.as_posix()}"]
+        cmd += app.cmake_options()
+        run(cmd, env=env)
+        return
     cmd = ["cmake", "-S", app.project_dir, "-B", app.cmake_dir,
            "-G", "Ninja Multi-Config",
            f"-DSIV3D_BASE={SIV3D_BASE.as_posix()}"]
@@ -188,19 +213,39 @@ def build(app, env):
     # configure が途中で失敗・中断したビルドツリー (CMakeCache.txt はあるが build.ninja が無い) は、
     # CMakeCache.txt だけ見るとビルドに失敗し続ける。そのまま configure し直しても、vcpkg が依存の
     # インストール済みと判断して飛ばす (find_package の結果もキャッシュに残る) ので、キャッシュを消してやり直す
-    if not (app.cmake_dir / "build.ninja").exists():
+    # (ios は Xcode ジェネレータなので build.ninja の代わりに .xcodeproj を見る)
+    generated = (any(app.cmake_dir.glob("*.xcodeproj")) if app.target == "ios"
+                 else (app.cmake_dir / "build.ninja").exists())
+    if not generated:
         cache = app.cmake_dir / "CMakeCache.txt"
         if cache.exists():
             log("incomplete build tree (no build.ninja): removing CMakeCache.txt and reconfiguring")
             cache.unlink()
             shutil.rmtree(app.cmake_dir / "CMakeFiles", ignore_errors=True)
         configure(app, env)
-    run(["cmake", "--build", app.cmake_dir, "--config", app.config], env=env)
+    cmd = ["cmake", "--build", app.cmake_dir, "--config", app.config]
+    if app.target == "ios":
+        # xcodebuild に SDK とアーキテクチャを渡す (署名が要る実機は自動でプロファイルを作らせる)
+        cmd += ["--", "-sdk", app.ios_sysroot, "-arch", app.ios_arch]
+        if app.sdk == "device":
+            cmd += ["-allowProvisioningUpdates"]
+    run(cmd, env=env)
 
 
 def stage(app, env):
     if app.dist_dir.exists():
         shutil.rmtree(app.dist_dir)
+    if app.target == "ios":
+        # Xcode のビルド結果 (<config>-iphonesimulator/<exe>.app など) をそのまま置く
+        # (出力先を指定しない場合は <config>-iphonesimulator/、指定した場合は <出力先>/<config>/ に置かれる)
+        built = (next(app.cmake_dir.rglob(f"{app.config}-{app.ios_sysroot}/{app.exe_name}.app"), None)
+                 or next(app.cmake_dir.rglob(f"{app.config}/{app.exe_name}.app"), None))
+        if built is None:
+            fail(f"built app not found under {app.cmake_dir}")
+        app.dist_dir.mkdir(parents=True)
+        shutil.copytree(built, app.dist_dir / f"{app.exe_name}.app", symlinks=True)
+        log(f"staged: {app.dist_dir}")
+        return
     run(["cmake", "--install", app.cmake_dir, "--config", app.config, "--prefix", app.dist_dir], env=env)
 
     if app.target == "macos":
@@ -220,11 +265,25 @@ def package(app):
         fail("not staged yet (run stage first)")
     app.package_dir.mkdir(parents=True, exist_ok=True)
     base = f"{app.exe_name}-{app.version}-{app.target}"
+    if app.target == "ios":
+        base = f"{app.exe_name}-{app.version}-ios-{app.sdk}"
 
     for fmt in app.packages():
-        if fmt == "zip":
+        if fmt == "ipa":
+            # ipa = Payload/<exe>.app を zip にしたもの (実機へのインストールには ios.team による署名が要る)
+            out = app.package_dir / f"{base}.ipa"
+            payload = app.package_dir / "Payload"
+            if payload.exists():
+                shutil.rmtree(payload)
+            payload.mkdir()
+            shutil.copytree(app.dist_dir / f"{app.exe_name}.app", payload / f"{app.exe_name}.app", symlinks=True)
+            if out.exists():
+                out.unlink()
+            run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", payload, out])
+            shutil.rmtree(payload)
+        elif fmt == "zip":
             out = app.package_dir / f"{base}.zip"
-            if app.target == "macos":
+            if app.target in ("macos", "ios"):
                 # .app はシンボリックリンクと実行属性を保つ ditto で固める
                 run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
                      app.dist_dir / f"{app.exe_name}.app", out])
@@ -248,7 +307,39 @@ def package(app):
         log(f"package: {out}")
 
 
+def ios_bundle_id(app):
+    ios = app.json.get("ios", {})
+    return ios.get("bundleId", app.json.get("bundleId", f"com.example.{app.exe_name}"))
+
+
+def run_ios_simulator(app):
+    """iOS シミュレータで起動する (起動中のシミュレータが無ければ、利用できる iPhone を 1 台起動する)"""
+    bundle = app.executable()
+    if not bundle.exists():
+        fail(f"not staged yet: {bundle}")
+    devices = json.loads(subprocess.run(["xcrun", "simctl", "list", "devices", "available", "--json"],
+                                        capture_output=True, text=True).stdout)["devices"]
+    all_devices = [d for runtime in devices.values() for d in runtime]
+    booted = [d for d in all_devices if d.get("state") == "Booted"]
+    if booted:
+        udid = booted[0]["udid"]
+    else:
+        iphones = [d for d in all_devices if d.get("name", "").startswith("iPhone")]
+        if not iphones:
+            fail("no iOS simulator available (Xcode > Settings > Components)")
+        udid = iphones[-1]["udid"]
+        run(["xcrun", "simctl", "boot", udid])
+    subprocess.run(["open", "-a", "Simulator"])
+    run(["xcrun", "simctl", "install", udid, bundle])
+    run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, ios_bundle_id(app)])
+
+
 def run_app(app):
+    if app.target == "ios":
+        if app.sdk != "simulator":
+            fail("run supports only --sdk simulator (install to a device with Xcode or devicectl)")
+        run_ios_simulator(app)
+        return
     exe = app.executable()
     if not exe.exists():
         fail(f"not staged yet: {exe}")
@@ -421,6 +512,7 @@ def main():
     parser.add_argument("--project", default=".")
     parser.add_argument("--target", choices=TARGETS, default=host_target())
     parser.add_argument("--config", default="Release")
+    parser.add_argument("--sdk", choices=["simulator", "device"], default="simulator")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--in-container", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--container")
@@ -429,15 +521,18 @@ def main():
     args = parser.parse_args()
 
     build_name = "linux-native" if (args.target == "linux" and args.native and not args.in_container) else None
-    app = App(args.project, args.target, args.config, build_name)
+    app = App(args.project, args.target, args.config, args.sdk, build_name)
 
     commands = []
     for c in args.commands:
         commands += ["build", "stage", "package"] if c == "all" else [c]
 
     host = host_target()
+    if app.target == "ios":
+        if host != "macos":
+            fail("target 'ios' can be built only on macOS")
     # web / android はどのホストでもビルドできる (emsdk / Android SDK)。linux は他のホストではコンテナでビルドする
-    if app.target != host and app.target not in ("web", "android") and not (app.target == "linux" and not args.native):
+    elif app.target != host and app.target not in ("web", "android") and not (app.target == "linux" and not args.native):
         fail(f"target '{app.target}' cannot be built on {host}")
 
     # linux: ネイティブ指定が無ければコンテナでビルドする (info / clean / run はホストで実行)

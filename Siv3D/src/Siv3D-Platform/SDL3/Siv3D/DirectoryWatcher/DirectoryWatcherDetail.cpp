@@ -237,6 +237,44 @@ namespace s3d
 	}
 }
 
+# elif SIV3D_PLATFORM(IOS)
+
+////////////////////////////////////////////////////////////////
+//
+//  iOS: 未対応 (FSEvents が無い)。常に非アクティブで、変更は報告しない
+//
+////////////////////////////////////////////////////////////////
+
+namespace s3d
+{
+	DirectoryWatcher::DirectoryWatcherDetail::DirectoryWatcherDetail(const FilePathView directory)
+		: m_targetDirectory{ FileSystem::FullPath(directory) }
+	{
+		LOG_FAIL(U"❌ DirectoryWatcher: not supported on iOS (`{}`)"_fmt(m_targetDirectory));
+	}
+
+	DirectoryWatcher::DirectoryWatcherDetail::~DirectoryWatcherDetail() = default;
+
+	bool DirectoryWatcher::DirectoryWatcherDetail::isActive() const
+	{
+		return false;
+	}
+
+	void DirectoryWatcher::DirectoryWatcherDetail::retrieveChanges(Array<FileChange>& fileChanges)
+	{
+		fileChanges.clear();
+	}
+
+	void DirectoryWatcher::DirectoryWatcherDetail::clearChanges()
+	{
+	}
+
+	const FilePath& DirectoryWatcher::DirectoryWatcherDetail::directory() const noexcept
+	{
+		return m_targetDirectory;
+	}
+}
+
 # elif SIV3D_PLATFORM(MACOS)
 
 ////////////////////////////////////////////////////////////////

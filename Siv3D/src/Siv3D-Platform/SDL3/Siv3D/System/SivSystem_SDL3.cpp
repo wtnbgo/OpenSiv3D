@@ -27,6 +27,7 @@
 # include <Siv3D/System.hpp>
 # include <Siv3D/FileSystem.hpp>
 # include <Siv3D/Unicode.hpp>
+# include <SDL3/SDL_misc.h>
 
 namespace s3d
 {
@@ -233,6 +234,17 @@ namespace s3d
 			return result;
 		}
 
+	# if SIV3D_PLATFORM(IOS)
+
+		// iOS には fork / exec が無い (外部プログラムは起動できない)
+		[[nodiscard]]
+		static bool Run(const char*, char*[])
+		{
+			return false;
+		}
+
+	# else
+
 		[[nodiscard]]
 		static bool Run(const char* program, char* argv[])
 		{
@@ -282,6 +294,8 @@ namespace s3d
 			sigprocmask(SIG_SETMASK, &oldset, 0);
 			return true;
 		}
+
+	# endif
 	}
 
 	namespace System
@@ -311,7 +325,14 @@ namespace s3d
 			}
 
 			std::string urlc = url.toUTF8();
-		# if SIV3D_PLATFORM(MACOS)
+		# if SIV3D_PLATFORM(IOS)
+			// iOS: SDL (UIApplication openURL) で開く。ローカルの HTML は file:// URL にする
+			if (not isWebPage)
+			{
+				urlc = ("file://" + urlc);
+			}
+			return SDL_OpenURL(urlc.c_str());
+		# elif SIV3D_PLATFORM(MACOS)
 			char* argv[] = { (char*)"open", urlc.data(), nullptr };
 			return detail::Run("/usr/bin/open", argv);
 		# else
@@ -326,6 +347,10 @@ namespace s3d
 			{
 				return false;
 			}
+
+		# if SIV3D_PLATFORM(IOS)
+			return false; // iOS にはファイルマネージャを開く手段が無い
+		# endif
 
 			std::string pathc = path.toUTF8();
 			char* argv[] = { (char*)"nautilus", pathc.data(), nullptr };
@@ -416,17 +441,25 @@ namespace s3d
 
 		bool LaunchFile(const FilePathView fileName)
 		{
+		# if SIV3D_PLATFORM(IOS)
+			// iOS: std::system が無いので SDL (UIApplication openURL) で開く
+			return SDL_OpenURL(("file://" + FileSystem::FullPath(fileName).toUTF8()).c_str());
+		# else
 		# if SIV3D_PLATFORM(MACOS)
 			const std::string command = ("open " + detail::Escape(fileName.narrow()));
 		# else
 			const std::string command = ("xdg-open " + detail::Escape(fileName.narrow()));
 		# endif
-
 			return (std::system(command.c_str()) == 0);
+		# endif
 		}
 
 		bool LaunchFileWithTextEditor(const FilePathView fileName)
 		{
+		# if SIV3D_PLATFORM(IOS)
+			(void)fileName;
+			return false; // iOS ではテキストエディタを起動できない
+		# else
 			const char* editor = std::getenv("VISUAL");
 
 			if (editor == nullptr)
@@ -450,6 +483,7 @@ namespace s3d
 			const std::string command = (std::string(editor) + " " + detail::Escape(fileName.narrow()));
 
 			return (std::system(command.c_str()) == 0);
+		# endif
 		}
 
 		bool IsRunningInVisualStudio()

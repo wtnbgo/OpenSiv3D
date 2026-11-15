@@ -6,6 +6,12 @@ if(WIN32)
     impl/win.cc
     impl/list_ports/list_ports_win.cc
   )
+elseif(IOS)
+  # iOS: IOKit が無いのでポートの列挙は Linux 版 (/sys を探す。iOS では常に空になる) を使う
+  set(SERIAL_PLATFORM_SOURCES
+    impl/unix.cc
+    impl/list_ports/list_ports_linux.cc
+  )
 elseif(APPLE)
   set(SERIAL_PLATFORM_SOURCES
     impl/unix.cc

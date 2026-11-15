@@ -252,9 +252,11 @@ END
   # ---------------------------------------------------------------------------
   # SDL3 の共有ライブラリ
   # ---------------------------------------------------------------------------
-  add_custom_command(TARGET ${target} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> "${_exe_dir}"
-  )
+  if(NOT IOS) # iOS は SDL3 を静的リンクする
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> "${_exe_dir}"
+    )
+  endif()
 
   # ---------------------------------------------------------------------------
   # Linux: steamrt sniper SDK (glibc 2.31) でのビルド・配布を想定した設定 (SDL3/BUILD_LINUX.md)
@@ -331,6 +333,77 @@ END
     )
     list(APPEND _asset_installs "${_from_path}|${_to}")
   endforeach()
+
+  # ---------------------------------------------------------------------------
+  # iOS: .app バンドル (平らな構成: 実行ファイル・resources/engine・アセットを .app の直下に置く)
+  #   siv3d-app.json の "ios": displayName / version / build / deploymentTarget /
+  #   orientations ("landscape" / "portrait" / "all" または UIInterfaceOrientation* の配列) / deviceFamily / team
+  # ---------------------------------------------------------------------------
+  if(IOS)
+    _siv3d_json_get(SIV3D_IOS_DISPLAY_NAME "${_json}" "${_name}" ios displayName)
+    _siv3d_json_get(SIV3D_IOS_VERSION "${_json}" "${_version}" ios version)
+    _siv3d_json_get(SIV3D_IOS_BUILD "${_json}" "1" ios build)
+    _siv3d_json_get(SIV3D_IOS_DEPLOYMENT_TARGET "${_json}" "15.0" ios deploymentTarget)
+    _siv3d_json_get(_ios_bundle_id "${_json}" "${_bundle_id}" ios bundleId)
+    _siv3d_json_get(_ios_device_family "${_json}" "1,2" ios deviceFamily)
+    _siv3d_json_get(_ios_team "${_json}" "" ios team)
+    set(SIV3D_IOS_BUNDLE_ID "${_ios_bundle_id}")
+    set(SIV3D_IOS_EXECUTABLE "${_exe_name}")
+
+    # 画面の向き
+    set(_orientations "")
+    string(JSON _orientation_type ERROR_VARIABLE _error TYPE "${_json}" ios orientations)
+    if(NOT _error AND _orientation_type STREQUAL "ARRAY")
+      string(JSON _count LENGTH "${_json}" ios orientations)
+      if(_count GREATER 0)
+        math(EXPR _last "${_count} - 1")
+        foreach(i RANGE ${_last})
+          string(JSON _o GET "${_json}" ios orientations ${i})
+          list(APPEND _orientations "${_o}")
+        endforeach()
+      endif()
+    else()
+      _siv3d_json_get(_orientation_kind "${_json}" "landscape" ios orientations)
+      if(_orientation_kind STREQUAL "portrait")
+        set(_orientations UIInterfaceOrientationPortrait)
+      elseif(_orientation_kind STREQUAL "all")
+        set(_orientations UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown)
+      else()
+        set(_orientations UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight)
+      endif()
+    endif()
+    set(SIV3D_IOS_ORIENTATIONS_PLIST "")
+    foreach(_o IN LISTS _orientations)
+      string(APPEND SIV3D_IOS_ORIENTATIONS_PLIST "\t\t<string>${_o}</string>\n")
+    endforeach()
+
+    set(_plist "${CMAKE_CURRENT_BINARY_DIR}/${target}-Info.plist")
+    configure_file("${SIV3D_SOURCE_DIR}/cmake/ios/Info.plist.in" "${_plist}" @ONLY)
+
+    set_target_properties(${target} PROPERTIES
+      MACOSX_BUNDLE ON
+      MACOSX_BUNDLE_INFO_PLIST "${_plist}"
+      MACOSX_BUNDLE_GUI_IDENTIFIER "${SIV3D_IOS_BUNDLE_ID}"
+      MACOSX_BUNDLE_BUNDLE_NAME "${SIV3D_IOS_DISPLAY_NAME}"
+      MACOSX_BUNDLE_SHORT_VERSION_STRING "${SIV3D_IOS_VERSION}"
+      MACOSX_BUNDLE_BUNDLE_VERSION "${SIV3D_IOS_BUILD}"
+      XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${SIV3D_IOS_BUNDLE_ID}"
+      XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "${SIV3D_IOS_DEPLOYMENT_TARGET}"
+      XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "${_ios_device_family}"
+      XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic"
+      XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+      "XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" "-"
+      XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${_ios_team}"
+      XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
+      XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+      XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)"
+      XCODE_GENERATE_SCHEME ON
+    )
+
+    # 配布: ビルド後にコピーしたものごと .app を置く (ipa は siv3d_app.py が作る)
+    install(TARGETS ${target} BUNDLE DESTINATION .)
+    return()
+  endif()
 
   # ---------------------------------------------------------------------------
   # macOS: .app バンドル

@@ -99,11 +99,21 @@ FetchContent_Declare(
   # 安定版に固定する (main は開発版で、取得するたびに変わる)
   GIT_TAG release-3.4.20
 )
+if(IOS AND CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+  # iOS シミュレータ (Intel Mac) は既定で SSE4.1 が無効なので、macOS の x86_64 と同じく有効にする
+  # (Platform.hpp の SSE 経路 / DirectXMath の SSE4 組み込み関数に必要)
+  add_compile_options(-msse4.1)
+endif()
+
 if(EMSCRIPTEN)
   # Web: 共有ライブラリは使えないので静的リンク。SDL のスレッドを有効にしないとダミー実装になる
   set(SDL_SHARED OFF CACHE BOOL "Build SDL shared library" FORCE)
   set(SDL_STATIC ON CACHE BOOL "Build SDL static library" FORCE)
   set(SDL_PTHREADS ON CACHE BOOL "SDL pthreads" FORCE)
+elseif(IOS)
+  # iOS: アプリから dylib を読み込めない (dlopen 不可) ので SDL3 は静的リンクする
+  set(SDL_SHARED OFF CACHE BOOL "Build SDL shared library" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "Build SDL static library" FORCE)
 else()
   set(SDL_SHARED ON CACHE BOOL "Build SDL shared library")
   set(SDL_STATIC OFF CACHE BOOL "Build SDL static library")
@@ -306,9 +316,13 @@ set(SIV3D_SDL3_SOURCES
 if(APPLE)
   list(APPEND SIV3D_SDL3_SOURCES
     Siv3D/src/Siv3D-Platform/SDL3/Siv3D/FileSystem/SivFileSystem_SDL3_macOS.mm
+  )
+endif()
+if(APPLE AND NOT IOS)
+  # macOS のファイルダイアログ補助 (Cocoa の Edit メニュー / 終了要求でのキャンセル)。ARC 前提
+  list(APPEND SIV3D_SDL3_SOURCES
     Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Dialog/SivDialog_SDL3_macOS.mm
   )
-  # ファイルダイアログ補助 (Edit メニュー / 終了要求でのキャンセル) は ARC 前提
   set_source_files_properties(Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Dialog/SivDialog_SDL3_macOS.mm
     PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
@@ -1137,7 +1151,7 @@ if(SIV3D_LINUX_DESKTOP)
     target_compile_options(Siv3D PUBLIC -msse4.2)
   endif()
 endif()
-if(APPLE)
+if(APPLE AND NOT IOS)
   # macOS の OpenGL ES は ANGLE (Metal バックエンド, dylib) で提供する。
   # エンジン (CWindow::init) が SDL のヒントに渡すファイル名を定義する。
   # dylib 本体はアプリ側で .app/Contents/Frameworks に同梱する (Siv3DApp の設定を参照)。
@@ -1147,7 +1161,25 @@ if(APPLE)
     SIV3D_ANGLE_EGL_LIB="$<TARGET_FILE_NAME:unofficial::angle::libEGL>"
   )
 endif()
-if(APPLE)
+if(IOS)
+  # iOS: OpenGL ES は OS の EAGL (SDL の UIKit バックエンドが使う)。SDL3 (静的) と soloud (miniaudio) の依存も含める
+  target_compile_definitions(Siv3D PUBLIC GLES_SILENCE_DEPRECATION)
+  if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+    target_compile_options(Siv3D PUBLIC -msse4.1) # アプリ側も Siv3D の SIMD ヘッダを使うので伝える
+  endif()
+  target_link_libraries(Siv3D INTERFACE
+    "-framework Foundation"
+    "-framework UIKit"
+    "-framework OpenGLES"
+    "-framework QuartzCore"
+    "-framework CoreGraphics"
+    "-framework CoreFoundation"
+    "-framework CoreText"
+    "-framework CoreAudio"
+    "-framework AudioToolbox"
+    "-framework AVFoundation"
+  )
+elseif(APPLE)
   # FileSystem のゴミ箱 (Foundation), DirectoryWatcher (FSEvents), infoware / serial (IOKit)
   target_link_libraries(Siv3D INTERFACE
     "-framework Cocoa"
@@ -1327,9 +1359,15 @@ option(SIV3D_BUILD_SAMPLE "Build Siv3D sample application" OFF)
 
 if(SIV3D_BUILD_SAMPLE)
   # SDL3/App/Main.cpp。出力はソース側の SDL3/App/<Config>/ (siv3d-app.json でアセット example/ を指定)
+  # iOS はビルドツリーに出力する (macOS の SDL3/App/<Config>/Siv3DApp.app と同じ場所だとバンドルが混ざる)
+  if(IOS)
+    set(_siv3d_sample_output "${CMAKE_CURRENT_BINARY_DIR}/SampleApp")
+  else()
+    set(_siv3d_sample_output "${CMAKE_CURRENT_SOURCE_DIR}/SDL3/App")
+  endif()
   siv3d_add_app(Siv3DApp
     SOURCES SDL3/App/Main.cpp
     CONFIG SDL3/App/siv3d-app.json
-    OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/SDL3/App"
+    OUTPUT_DIRECTORY "${_siv3d_sample_output}"
   )
 endif()
