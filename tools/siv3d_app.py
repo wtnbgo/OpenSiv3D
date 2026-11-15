@@ -179,6 +179,16 @@ def stage(app, env):
     if app.dist_dir.exists():
         shutil.rmtree(app.dist_dir)
     run(["cmake", "--install", app.cmake_dir, "--config", app.config, "--prefix", app.dist_dir], env=env)
+
+    if app.target == "macos":
+        # install で RPATH を書き換えた後に署名し直す。既定は ad-hoc 署名 ("-"。Apple Silicon では
+        # 署名の無い実行ファイルは起動できない)。配布用の Developer ID は macos.sign に指定する
+        # (公証は別途。false で署名しない)
+        identity = app.target_json.get("sign", "-")
+        if identity:
+            run(["codesign", "--force", "--deep", "--sign", identity,
+                 app.dist_dir / f"{app.exe_name}.app"])
+
     log(f"staged: {app.dist_dir}")
 
 
