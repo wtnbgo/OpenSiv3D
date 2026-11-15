@@ -75,7 +75,8 @@ Siv3DApp.app/Contents/
 ### その他
 
 - 音声は soloud の miniaudio バックエンド (Core Audio) で再生します。miniaudio は既定ではフレームワークを相対パスで実行時に読み込もうとしますが、現行の macOS では解決できず NoSound にフォールバックしてしまうため、`MA_NO_RUNTIME_LINKING` を定義し、CoreAudio / AudioToolbox / AudioUnit を直接リンクしています。起動ログに `Audio backend: MiniAudio` と出れば有効です。
-- 動画 (`VideoReader`) は OpenCV (macOS では AVFoundation バックエンド) で読み込みます。
+- 動画 (`VideoReader` / `VideoTexture`) は、WebM (VP8 / VP9) を [movie-player](https://github.com/wamsoft/movie-player) (libvpx) で、それ以外 (MP4 など) を OpenCV の AVFoundation バックエンドで読み込みます。`VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で作成すると、音声トラック (Vorbis / Opus) を持つ WebM は映像と音声を同期して再生します。
+  - 初回の configure で vcpkg が libvpx と libyuv をビルドします。libvpx のビルドには nasm を使います (Homebrew の `nasm` で確認)。
 - `DirectoryWatcher` は FSEvents による実装です (旧 `Siv3D-Platform/macOS` の実装を移植)。
 - ファイルダイアログは SDL3 (`SDL_ShowFileDialogWithProperties`、NSOpenPanel / NSSavePanel) を使います。
   - SDL のアプリメニューには Edit メニューが無いため、ダイアログ表示中だけ標準の Edit メニューを追加し、パネル内で ⌘A / ⌘C / ⌘V / ⌘X / ⌘Z を効かせています (`SivDialog_SDL3_macOS.mm`)。常設にしないのは、ゲームウィンドウ側の ⌘C / ⌘V がメニューに取られて Siv3D のキー入力に届かなくなるのを避けるためです。
