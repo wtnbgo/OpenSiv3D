@@ -68,7 +68,8 @@
             "inherits": "osx",
             "cacheVariables": {
                 "VCPKG_TARGET_TRIPLET":"x64-osx",
-                "VCPKG_TARGET_ARCHITECTURE":"x64"
+                "VCPKG_TARGET_ARCHITECTURE":"x64",
+                "CMAKE_OSX_ARCHITECTURES":"x86_64"
             }
         },
         {
@@ -78,7 +79,8 @@
             "inherits": "osx",
             "cacheVariables": {
                 "VCPKG_TARGET_TRIPLET":"arm64-osx",
-                "VCPKG_TARGET_ARCHITECTURE":"arm64"
+                "VCPKG_TARGET_ARCHITECTURE":"arm64",
+                "CMAKE_OSX_ARCHITECTURES":"arm64"
             }
         },
         {
