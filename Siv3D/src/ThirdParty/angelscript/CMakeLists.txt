@@ -3,6 +3,10 @@
 if(MSVC)
   enable_language(ASM_MASM)
   set(AS_MSVC_ASM_SOURCES as_callfunc_x64_msvc_asm.asm)
+elseif(NOT APPLE AND NOT EMSCRIPTEN)
+  # Android / Linux の arm64 (aarch64) 用の呼び出し規約サンク。ファイル内で __aarch64__ のときだけ中身がある
+  enable_language(ASM)
+  set(AS_MSVC_ASM_SOURCES as_callfunc_arm64_gcc.S)
 endif()
 add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_atomic.cpp
@@ -56,3 +60,8 @@ set_target_properties(Siv3D_ThirdParty_angelscript PROPERTIES
   CXX_EXTENSIONS OFF
   DEBUG_POSTFIX "d"
 )
+
+# Web (wasm) にはネイティブの呼び出し規約の実装が無いので、移植性優先のモードにする (Web 版ではスクリプト自体も無効)
+if(EMSCRIPTEN)
+  target_compile_definitions(Siv3D_ThirdParty_angelscript PRIVATE AS_MAX_PORTABILITY)
+endif()

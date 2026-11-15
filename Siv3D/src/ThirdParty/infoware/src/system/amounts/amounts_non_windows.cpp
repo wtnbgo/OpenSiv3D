@@ -16,7 +16,10 @@
 #include "infoware/detail/scope.hpp"
 #include "infoware/system.hpp"
 #include <cstring>
+// Android (bionic) には wordexp が無いので、デバイス数は数えない (0 を返す)
+#if !defined(__ANDROID__)
 #include <wordexp.h>
+#endif
 
 template <class Callback>
 class ScopeGuard final
@@ -44,7 +47,10 @@ public:
 };
 
 // http://man7.org/linux/man-pages/man3/wordexp.3.html
-static std::size_t count_expansions(const char* of) noexcept {
+static std::size_t count_expansions([[maybe_unused]] const char* of) noexcept {
+#if defined(__ANDROID__)
+	return 0;
+#else
 	wordexp_t exp{};
 	ScopeGuard exp_deleter{[&]() { wordfree(&exp); }};
 
@@ -56,6 +62,7 @@ static std::size_t count_expansions(const char* of) noexcept {
 		return 0;
 	else
 		return exp.we_wordc;
+#endif
 }
 
 

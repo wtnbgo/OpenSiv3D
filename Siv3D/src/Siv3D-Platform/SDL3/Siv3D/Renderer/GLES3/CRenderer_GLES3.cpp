@@ -23,6 +23,17 @@
 # include <Siv3D/Renderer3D/GLES3/CRenderer3D_GLES3.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 
+# if SIV3D_PLATFORM(WEB)
+#	include <emscripten.h>
+
+// Web: 次の描画フレーム (requestAnimationFrame) まで待ってブラウザに制御を返す。
+// Siv3D のアプリは while (System::Update()) のループで処理を止めるので、ASYNCIFY (または JSPI) で
+// ここから一度ブラウザのイベントループに戻る (この間にキャンバスへの表示・入力イベント・音声の処理が進む)
+EM_ASYNC_JS(void, siv3d_wait_animation_frame, (), {
+	await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+});
+# endif
+
 namespace s3d
 {
 	namespace detail
@@ -64,7 +75,9 @@ namespace s3d
 		m_window = static_cast<SDL_Window*>(SIV3D_ENGINE(Window)->getHandle());
 		
 		SDL_GL_MakeCurrent(m_window, SDL_GL_GetCurrentContext());
+	# if not SIV3D_PLATFORM(WEB) // Web の表示は requestAnimationFrame に同期する (present を参照)
 		SDL_GL_SetSwapInterval(1);
+	# endif
 
 		// glad は CWindow::init() で初期化済み
 		
@@ -147,6 +160,10 @@ namespace s3d
 	bool CRenderer_GLES3::present()
 	{
 		SDL_GL_SwapWindow(m_window);
+
+	# if SIV3D_PLATFORM(WEB)
+		siv3d_wait_animation_frame();
+	# endif
 		
 		if constexpr (SIV3D_BUILD(DEBUG))
 		{
@@ -165,7 +182,9 @@ namespace s3d
 
 		m_vSyncEnabled = enabled;
 
+	# if not SIV3D_PLATFORM(WEB)
 		SDL_GL_SetSwapInterval(static_cast<int32>(m_vSyncEnabled));
+	# endif
 	}
 
 	bool CRenderer_GLES3::isVSyncEnabled() const

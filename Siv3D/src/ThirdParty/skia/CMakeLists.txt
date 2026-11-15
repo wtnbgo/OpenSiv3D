@@ -5,6 +5,11 @@ if(WIN32)
   set(SKIA_PLATFORM_SOURCES
     src/ports/SkDebug_win.cpp
   )
+elseif(ANDROID)
+  # Android は SkDebug_stdio.cpp が対象外 (SK_BUILD_FOR_ANDROID) なので logcat 版
+  set(SKIA_PLATFORM_SOURCES
+    src/ports/SkDebug_android.cpp
+  )
 else()
   set(SKIA_PLATFORM_SOURCES
     src/ports/SkDebug_stdio.cpp

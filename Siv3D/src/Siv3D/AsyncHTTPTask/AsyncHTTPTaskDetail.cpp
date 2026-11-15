@@ -14,15 +14,20 @@
 # include <Siv3D/FileSystem.hpp>
 # include "AsyncHTTPTaskDetail.hpp"
 
-# define CURL_STATICLIB
-# if SIV3D_PLATFORM(WINDOWS) | SIV3D_PLATFORM(WEB)
-#	include <ThirdParty-prebuilt/curl/curl.h>
+# if SIV3D_PLATFORM(WEB)
+#	include <Siv3D/Network/WebFetch.hpp> // Web は curl の代わりに Emscripten の fetch API
 # else
-#	include <curl/curl.h>
+#	define CURL_STATICLIB
+#	if SIV3D_PLATFORM(WINDOWS)
+#		include <ThirdParty-prebuilt/curl/curl.h>
+#	else
+#		include <curl/curl.h>
+#	endif
 # endif
 
 namespace s3d
 {
+# if not SIV3D_PLATFORM(WEB)
 	namespace detail
 	{
 		static size_t WriteAsyncCallback(const char* ptr, const size_t size, const size_t nmemb, IWriter* pWriter)
@@ -55,6 +60,7 @@ namespace s3d
 			return 0;
 		}
 	}
+# endif
 
 	AsyncHTTPTaskDetail::AsyncHTTPTaskDetail() {}
 
@@ -215,6 +221,28 @@ namespace s3d
 			return{};
 		}
 
+	# if SIV3D_PLATFORM(WEB)
+		// Web: このスレッド (AsyncTask のワーカー) から同期 fetch で送る。進捗は取れない
+		setStatus(HTTPAsyncStatus::Downloading);
+		const detail::WebFetchResult result = detail::WebFetch("GET", m_url, m_headers, nullptr, 0, *m_writer.getIWriter());
+		close();
+
+		if (not result.ok)
+		{
+			setStatus(HTTPAsyncStatus::Failed);
+
+			if (m_writer.path)
+			{
+				FileSystem::Remove(m_writer.path);
+			}
+
+			return{};
+		}
+
+		setStatus(HTTPAsyncStatus::Succeeded);
+		return HTTPResponse{ result.responseHeaders };
+	# else
+
 		::CURL* curl = ::curl_easy_init();
 		{
 			if (not curl)
@@ -284,6 +312,7 @@ namespace s3d
 		setStatus(HTTPAsyncStatus::Succeeded);
 
 		return HTTPResponse{ responseHeaders };
+	# endif
 	}
 
 	HTTPResponse AsyncHTTPTaskDetail::runPost()
@@ -293,6 +322,28 @@ namespace s3d
 			setStatus(HTTPAsyncStatus::Failed);
 			return{};
 		}
+
+	# if SIV3D_PLATFORM(WEB)
+		// Web: このスレッド (AsyncTask のワーカー) から同期 fetch で送る。進捗は取れない
+		setStatus(HTTPAsyncStatus::Downloading);
+		const detail::WebFetchResult result = detail::WebFetch("POST", m_url, m_headers, m_blob.data(), m_blob.size(), *m_writer.getIWriter());
+		close();
+
+		if (not result.ok)
+		{
+			setStatus(HTTPAsyncStatus::Failed);
+
+			if (m_writer.path)
+			{
+				FileSystem::Remove(m_writer.path);
+			}
+
+			return{};
+		}
+
+		setStatus(HTTPAsyncStatus::Succeeded);
+		return HTTPResponse{ result.responseHeaders };
+	# else
 
 		::CURL* curl = ::curl_easy_init();
 		{
@@ -366,5 +417,6 @@ namespace s3d
 		setStatus(HTTPAsyncStatus::Succeeded);
 
 		return HTTPResponse{ responseHeaders };
+	# endif
 	}
 }

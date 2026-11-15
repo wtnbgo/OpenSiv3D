@@ -111,6 +111,17 @@
             "cacheVariables": {
                 "ANDROID_ABI":"x86_64"
             }
+        },
+        {
+            "name": "wasm32-emscripten",
+            "displayName": "for web (Emscripten wasm32)",
+            "description": "Emscripten wasm32 build (requires EMSDK)",
+            "inherits": "default",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET":"wasm32-emscripten",
+                "VCPKG_OVERLAY_TRIPLETS":"${sourceDir}/cmake/vcpkg-triplets",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE":"${sourceDir}/cmake/toolchains/wasm32-emscripten.cmake"
+            }
         }
     ],
 
@@ -138,6 +149,10 @@
         {
             "name": "x64-android",
             "configurePreset": "x64-android"
+        },
+        {
+            "name": "wasm32-emscripten",
+            "configurePreset": "wasm32-emscripten"
         }
     ]
 }

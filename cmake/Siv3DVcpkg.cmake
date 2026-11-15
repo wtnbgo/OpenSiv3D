@@ -18,6 +18,13 @@ option(SIV3D_WITH_MOVIEPLAYER "Play WebM videos with movie-player (libvpx)" ON)
 # OFF にすると FFmpeg を一切含まない (Linux で開ける動画は WebM だけになる)。Windows / macOS は OS の機能を使うので影響しない
 option(SIV3D_WITH_FFMPEG "Linux: build opencv4 with FFmpeg (LGPL, bundled as shared libraries)" ON)
 
+# Web (Emscripten) は vcpkg の libvpx が wasm に対応していないので movie-player を使わない
+# (project() より前なので EMSCRIPTEN ではなく triplet で判定する)
+if(VCPKG_TARGET_TRIPLET MATCHES "emscripten" AND SIV3D_WITH_MOVIEPLAYER)
+  message(STATUS "[info] SIV3D_WITH_MOVIEPLAYER is not supported on Web (libvpx); disabled")
+  set(SIV3D_WITH_MOVIEPLAYER OFF CACHE BOOL "Play WebM videos with movie-player (libvpx)" FORCE)
+endif()
+
 if(SIV3D_WITH_MOVIEPLAYER AND NOT ("movieplayer" IN_LIST VCPKG_MANIFEST_FEATURES))
   list(APPEND VCPKG_MANIFEST_FEATURES "movieplayer")
 endif()

@@ -18,6 +18,12 @@
 # include <Siv3D/Unicode.hpp>
 # include <Siv3D/FileSystem.hpp>
 
+# if defined(__ANDROID__)
+	// Android: SDL の Java 側 (SDLActivity) が libmain.so の SDL_main を呼ぶので、main を SDL_main にする
+	// (アプリの共有ライブラリは -Wl,--undefined=SDL_main でこの関数を取り込む。siv3d_add_app を参照)
+#	include <SDL3/SDL_main.h>
+# endif
+
 void Main();
 
 namespace s3d::detail::init

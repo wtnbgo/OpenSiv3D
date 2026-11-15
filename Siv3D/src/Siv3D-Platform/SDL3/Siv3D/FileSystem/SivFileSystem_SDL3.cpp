@@ -217,7 +217,7 @@ namespace s3d
 			return MacOS_TrashFile(path.narrow().c_str());
 		}
 
-	# else
+	# elif SIV3D_PLATFORM(LINUX)
 
 		//
 		// freedesktop.org Trash 仕様 (https://specifications.freedesktop.org/trash-spec/) の実装。
@@ -523,6 +523,15 @@ namespace s3d
 				return false;
 			}
 
+			return false;
+		}
+
+	# else
+
+		// Web (Emscripten): ゴミ箱は無い (元に戻せる削除はできないので失敗を返す)
+		[[nodiscard]]
+		static bool TrashFile(const FilePathView)
+		{
 			return false;
 		}
 

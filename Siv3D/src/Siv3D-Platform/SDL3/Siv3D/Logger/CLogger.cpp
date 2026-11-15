@@ -12,8 +12,12 @@
 # include <array>
 # include <Siv3D/String.hpp>
 # include <Siv3D/FormatLiteral.hpp>
+# include <Siv3D/LogType.hpp>
 # include <Siv3D/Time.hpp>
 # include "CLogger.hpp"
+# if defined(__ANDROID__)
+#	include <android/log.h>
+# endif
 
 namespace s3d
 {
@@ -57,6 +61,9 @@ namespace s3d
 		{
 		# if SIV3D_PLATFORM(WEB)
 			std::cout << output << std::endl;
+		# elif defined(__ANDROID__)
+			// Android は標準出力が捨てられるので logcat に出す (adb logcat -s Siv3D)
+			__android_log_write(((type == LogType::Error) ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO), "Siv3D", output.c_str());
 		# else
 			std::clog << output << std::endl;
 		# endif

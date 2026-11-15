@@ -31,7 +31,9 @@ namespace s3d
 
 		// ファイルのオープン
 		{
-			SDL_IOStream* io = SDL_IOFromFile(path.narrow().c_str(), "rb");
+			// Android の SDL_IOFromFile は相対パスを APK の assets として開くので、絶対パスにして渡す
+			// (Siv3D のファイルは内部ストレージに展開してある。他の OS でも結果は同じ)
+			SDL_IOStream* io = SDL_IOFromFile(FileSystem::FullPath(path).narrow().c_str(), "rb");
 
 			if (not io) SIV3D_UNLIKELY
 			{

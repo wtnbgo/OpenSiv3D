@@ -84,7 +84,12 @@ function(siv3d_add_app target)
   # ---------------------------------------------------------------------------
   # 実行ファイル
   # ---------------------------------------------------------------------------
-  add_executable(${target} ${ARG_SOURCES})
+  if(ANDROID)
+    # Android: SDL の Java 側 (SDLActivity) が読み込む共有ライブラリ libmain.so にする
+    add_library(${target} SHARED ${ARG_SOURCES})
+  else()
+    add_executable(${target} ${ARG_SOURCES})
+  endif()
   target_link_libraries(${target} PRIVATE Siv3D::Siv3D)
   target_compile_features(${target} PRIVATE cxx_std_20)
   set_target_properties(${target} PROPERTIES
@@ -107,6 +112,96 @@ function(siv3d_add_app target)
   )
 
   set(_exe_dir "$<TARGET_FILE_DIR:${target}>")
+
+  # ---------------------------------------------------------------------------
+  # Android: libmain.so を作るだけ。APK への格納・アセット・署名は外枠 (siv3d_and の Gradle) が行う
+  #   エンジンのリソースとアセットは APK の assets に入れ、初回起動時に内部ストレージへ展開して
+  #   そのフォルダを Siv3D のアプリディレクトリ (起動引数) として渡す
+  # ---------------------------------------------------------------------------
+  if(ANDROID)
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME "main")
+    target_link_libraries(${target} PRIVATE android log)
+    # Siv3D (静的ライブラリ) の SDL_main を libmain.so に取り込んで公開する
+    target_link_options(${target} PRIVATE "-Wl,--undefined=SDL_main")
+    return()
+  endif()
+
+  # ---------------------------------------------------------------------------
+  # Web (Emscripten): <exeName>.html / .js / .wasm / .data を作る
+  #   エンジンのリソースとアセットは .data にまとめて仮想ファイルシステムに置く (--preload-file)。
+  #   実行ファイルのパスは /this.program になるので、Resource() は /resources/、アセットは / からの相対パス
+  # ---------------------------------------------------------------------------
+  if(EMSCRIPTEN)
+    _siv3d_json_get(_web_initial_memory "${_json}" "512MB" web initialMemory)
+    _siv3d_json_get(_web_maximum_memory "${_json}" "4GB" web maximumMemory)
+    _siv3d_json_get(_web_shell "${_json}" "${SIV3D_SOURCE_DIR}/SDL3/Web/shell.html" web shell)
+    get_filename_component(_web_shell "${_web_shell}" ABSOLUTE BASE_DIR "${_config_dir}")
+
+    set_target_properties(${target} PROPERTIES SUFFIX ".html")
+    target_link_options(${target} PRIVATE
+      # while (System::Update()) のループからブラウザに制御を返す (CRenderer_GLES3::present)
+      "SHELL:-s ASYNCIFY=1"
+      "SHELL:-s ASYNCIFY_STACK_SIZE=1048576"
+      # スレッド (AsyncTask など)。メインスレッドはワーカーの起動を待てないので、先に用意しておく
+      "SHELL:-s PTHREAD_POOL_SIZE=navigator.hardwareConcurrency+8"
+      "SHELL:-s PTHREAD_POOL_SIZE_STRICT=0"
+      # メモリ
+      "SHELL:-s INITIAL_MEMORY=${_web_initial_memory}"
+      "SHELL:-s MAXIMUM_MEMORY=${_web_maximum_memory}"
+      "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+      "SHELL:-s STACK_SIZE=8MB"
+      "SHELL:-s DEFAULT_PTHREAD_STACK_SIZE=2MB"
+      # WebGL 2 (= OpenGL ES 3.0)。glad で関数を取り出すので GetProcAddress を有効にする
+      "SHELL:-s MIN_WEBGL_VERSION=2"
+      "SHELL:-s MAX_WEBGL_VERSION=2"
+      "SHELL:-s FULL_ES3=1"
+      "SHELL:-s GL_ENABLE_GET_PROC_ADDRESS=1"
+      # ファイルシステム (セーブデータ用の IndexedDB 永続化を含む)
+      # HTTP (SimpleHTTP / AsyncHTTPTask) は fetch API
+      "SHELL:-s FETCH=1"
+      "SHELL:-s FORCE_FILESYSTEM=1"
+      "-lidbfs.js"
+      # miniaudio の Web Audio 実装 (EM_ASM) が Module.HEAPF32 を使う
+      "SHELL:-s EXPORTED_RUNTIME_METHODS=ccall,FS,HEAPF32,HEAP32,HEAPU8"
+      # SDL3 の JS 側 (EM_ASM) が Module._malloc / _free を使う
+      "SHELL:-s EXPORTED_FUNCTIONS=_main,_malloc,_free"
+      "SHELL:--shell-file \"${_web_shell}\""
+      $<$<CONFIG:Debug>:SHELL:-s ASSERTIONS=1>
+    )
+
+    set(_web_outputs
+      "${_exe_dir}/${_exe_name}.html"
+      "${_exe_dir}/${_exe_name}.js"
+      "${_exe_dir}/${_exe_name}.wasm"
+      "${_exe_dir}/${_exe_name}.data"
+    )
+
+    set(_engine_resource_src "${SIV3D_SOURCE_DIR}/Web/App/resources/engine")
+    foreach(_dir font soundfont texture shader/essl)
+      target_link_options(${target} PRIVATE "SHELL:--preload-file \"${_engine_resource_src}/${_dir}@/resources/engine/${_dir}\"")
+    endforeach()
+    foreach(_asset IN LISTS _assets)
+      string(REPLACE "|" ";" _pair "${_asset}")
+      list(GET _pair 0 _from)
+      list(LENGTH _pair _pair_length)
+      if(_pair_length GREATER 1)
+        list(GET _pair 1 _to)
+      else()
+        set(_to "${_from}")
+      endif()
+      get_filename_component(_from_path "${_from}" ABSOLUTE BASE_DIR "${_config_dir}")
+      if(IS_DIRECTORY "${_from_path}")
+        target_link_options(${target} PRIVATE "SHELL:--preload-file \"${_from_path}@/${_to}\"")
+      else()
+        message(WARNING "siv3d_add_app(${target}): asset directory not found: ${_from_path}")
+      endif()
+    endforeach()
+
+    # 配布: 4 ファイルと、確認用の配信スクリプト (COOP/COEP ヘッダ付き)
+    install(FILES ${_web_outputs} DESTINATION .)
+    install(FILES "${SIV3D_SOURCE_DIR}/SDL3/Web/serve.py" DESTINATION .)
+    return()
+  endif()
 
   # ---------------------------------------------------------------------------
   # Windows: コンソール・アイコン・バージョン情報
@@ -164,7 +259,7 @@ END
   # ---------------------------------------------------------------------------
   # Linux: steamrt sniper SDK (glibc 2.31) でのビルド・配布を想定した設定 (SDL3/BUILD_LINUX.md)
   # ---------------------------------------------------------------------------
-  if(UNIX AND NOT APPLE)
+  if(SIV3D_LINUX_DESKTOP)
     # 同梱 libSDL3 を exe と同じフォルダから確実に読ませる。Steam 起動時は
     # LD_LIBRARY_PATH の先頭に Steam ランタイムや /usr/lib が入るため、
     # LD_LIBRARY_PATH の後に探される RUNPATH ではシステム側の libSDL3 が勝ってしまう。

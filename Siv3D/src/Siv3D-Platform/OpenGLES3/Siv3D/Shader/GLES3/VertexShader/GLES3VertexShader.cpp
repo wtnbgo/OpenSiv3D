@@ -9,6 +9,7 @@
 //
 //-----------------------------------------------
 
+# include "../GLES3ShaderSource.hpp"
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/Unicode.hpp>
 # include <Siv3D/ShaderStage.hpp>
@@ -53,7 +54,8 @@ namespace s3d
 				sourceData.replace(oldName, newName);
 			}
 
-			const std::string sourceUTF8 = sourceData.toUTF8();
+			std::string sourceUTF8 = sourceData.toUTF8();
+			detail::NormalizeGLSLESSource(sourceUTF8);
 			const char* pSource = sourceUTF8.c_str();
 
 			::glShaderSource(m_vertexShader, 1, &pSource, NULL);

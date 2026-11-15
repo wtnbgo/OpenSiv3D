@@ -16,7 +16,7 @@
 #
 # オプション:
 #   --project DIR    アプリのフォルダ (siv3d-app.json がある場所。既定: カレントディレクトリ)
-#   --target T       windows / linux / macos (既定: 実行中の OS)
+#   --target T       windows / linux / macos / web / android (既定: 実行中の OS)
 #   --config C       Release / Debug / RelWithDebInfo (既定: Release)
 #   --native         linux: コンテナを使わずホストで直接ビルドする (出力は build/linux-native)
 #   --container IMG  linux: ビルドに使うコンテナイメージ (既定: siv3d-app.json の linux.container)
@@ -27,6 +27,9 @@
 # 機種とビルドするホスト:
 #   windows : Windows (Visual Studio 2022 以降。開発者環境でなければ vswhere で探して読み込む)
 #   macos   : macOS (Xcode Command Line Tools)
+#   web     : どのホストでも (emsdk。環境変数 EMSDK)。出力は <exeName>.html / .js / .wasm / .data と serve.py
+#   android : どのホストでも (Android SDK / NDK / JDK 17 以上)。外枠 siv3d_and (OpenSiv3D の隣、または
+#             環境変数 SIV3D_ANDROID) の Gradle でビルドする。出力は <exeName>.apk (package で aab も可)
 #   linux   : sniper SDK のコンテナ (steamdev の deckbuild-sniper イメージ。SDL3/BUILD_LINUX.md を参照)。
 #             Windows は docker または WSL のコンテナ (wslc)、macOS / Linux は docker。
 #             Linux ホストでは --native でホストのコンパイラでもビルドできる
@@ -44,7 +47,7 @@ import zipfile
 from pathlib import Path
 
 SIV3D_BASE = Path(__file__).resolve().parent.parent
-TARGETS = ("windows", "linux", "macos")
+TARGETS = ("windows", "linux", "macos", "web", "android")
 
 
 def log(message):
@@ -112,10 +115,14 @@ class App:
         return [f"-D{k}={v}" for k, v in options.items()]
 
     def packages(self):
-        default = {"windows": ["zip"], "linux": ["tar.gz"], "macos": ["zip"]}[self.target]
+        default = {"windows": ["zip"], "linux": ["tar.gz"], "macos": ["zip"], "web": ["zip"], "android": ["apk"]}[self.target]
         return self.target_json.get("package", default)
 
     def executable(self):
+        if self.target == "android":
+            return self.dist_dir / f"{self.exe_name}.apk"
+        if self.target == "web":
+            return self.dist_dir / f"{self.exe_name}.html"
         if self.target == "windows":
             return self.dist_dir / f"{self.exe_name}.exe"
         if self.target == "macos":
@@ -167,6 +174,12 @@ def configure(app, env):
     cmd = ["cmake", "-S", app.project_dir, "-B", app.cmake_dir,
            "-G", "Ninja Multi-Config",
            f"-DSIV3D_BASE={SIV3D_BASE.as_posix()}"]
+    if app.target == "web":
+        # Emscripten: vcpkg の triplet と toolchain (-pthread / -fwasm-exceptions を足すラッパー)
+        if not os.environ.get("EMSDK"):
+            fail("EMSDK is not set (install emsdk and set EMSDK to its folder)")
+        cmd += ["-DVCPKG_TARGET_TRIPLET=wasm32-emscripten",
+                f"-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE={(SIV3D_BASE / 'cmake' / 'toolchains' / 'wasm32-emscripten.cmake').as_posix()}"]
     cmd += app.cmake_options()
     run(cmd, env=env)
 
@@ -239,6 +252,12 @@ def run_app(app):
     exe = app.executable()
     if not exe.exists():
         fail(f"not staged yet: {exe}")
+    if app.target == "web":
+        # COOP/COEP ヘッダ付きのサーバで配信する (Ctrl+C で終了)
+        port = str(app.target_json.get("port", 8080))
+        log(f"open http://127.0.0.1:{port}/{exe.name}")
+        subprocess.run([sys.executable, str(app.dist_dir / "serve.py"), port, str(app.dist_dir)])
+        return
     log(f"run: {exe}")
     subprocess.run([str(exe)], cwd=exe.parent)
 
@@ -324,6 +343,76 @@ def run_in_container(app, args, commands):
 
 
 # -----------------------------------------------------------------------------
+# Android: 外枠 siv3d_and (Gradle) でビルドする
+# -----------------------------------------------------------------------------
+
+def android_shell_dir():
+    """siv3d_and の場所: 環境変数 SIV3D_ANDROID → OpenSiv3D の隣の siv3d_and"""
+    d = Path(os.environ.get("SIV3D_ANDROID", SIV3D_BASE.parent / "siv3d_and")).resolve()
+    if not (d / "settings.gradle").exists():
+        fail(f"siv3d_and not found: {d} (set SIV3D_ANDROID)")
+    return d
+
+
+def gradle(app, tasks, abis=None):
+    shell = android_shell_dir()
+    gradlew = shell / ("gradlew.bat" if platform.system() == "Windows" else "gradlew")
+    env = dict(os.environ, PROJECT_DIR=str(app.project_dir), SIV3D_BASE=str(SIV3D_BASE))
+    cmd = [gradlew, "--console=plain"] + tasks
+    if abis:
+        cmd.append(f"-Pabis={abis}")
+    run(cmd, cwd=shell, env=env)
+
+
+def android_variant(app):
+    return "Debug" if app.config == "Debug" else "Release"
+
+
+def android_build(app, args):
+    gradle(app, [f"assemble{android_variant(app)}"], args.abis)
+
+
+def android_stage(app):
+    variant = android_variant(app).lower()
+    apks = sorted((app.build_dir / "gradle" / "outputs" / "apk" / variant).glob("*.apk"))
+    if not apks:
+        fail("APK not found (run build first)")
+    if app.dist_dir.exists():
+        shutil.rmtree(app.dist_dir)
+    app.dist_dir.mkdir(parents=True)
+    shutil.copy2(apks[0], app.executable())
+    log(f"staged: {app.executable()}")
+
+
+def android_package(app, args):
+    app.package_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{app.exe_name}-{app.version}-android"
+    for fmt in app.packages():
+        if fmt == "apk":
+            out = app.package_dir / f"{base}.apk"
+            shutil.copy2(app.executable(), out)
+        elif fmt == "aab":
+            gradle(app, [f"bundle{android_variant(app)}"], args.abis)
+            variant = android_variant(app).lower()
+            aabs = sorted((app.build_dir / "gradle" / "outputs" / "bundle" / variant).glob("*.aab"))
+            if not aabs:
+                fail("AAB not found")
+            out = app.package_dir / f"{base}.aab"
+            shutil.copy2(aabs[0], out)
+        else:
+            fail(f"unknown package format for android: {fmt}")
+        log(f"package: {out}")
+
+
+def android_run(app):
+    adb = shutil.which("adb") or str(Path(os.environ.get("ANDROID_HOME", "")) / "platform-tools" / "adb")
+    android_json = app.target_json
+    app_id = android_json.get("applicationId", app.json.get("bundleId", "com.example.siv3dapp"))
+    run([adb, "install", "-r", app.executable()])
+    run([adb, "shell", "am", "start", "-n", f"{app_id}/org.siv3d.app.SivActivity"])
+
+
+# -----------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Siv3D (SDL3) app build driver")
@@ -336,6 +425,7 @@ def main():
     parser.add_argument("--in-container", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--container")
     parser.add_argument("--engine", choices=["auto", "docker", "wslc", "podman"])
+    parser.add_argument("--abis", help="android: ABI (カンマ区切り。例: x86_64)。既定は siv3d-app.json の android.abis")
     args = parser.parse_args()
 
     build_name = "linux-native" if (args.target == "linux" and args.native and not args.in_container) else None
@@ -346,7 +436,8 @@ def main():
         commands += ["build", "stage", "package"] if c == "all" else [c]
 
     host = host_target()
-    if app.target != host and not (app.target == "linux" and not args.native):
+    # web / android はどのホストでもビルドできる (emsdk / Android SDK)。linux は他のホストではコンテナでビルドする
+    if app.target != host and app.target not in ("web", "android") and not (app.target == "linux" and not args.native):
         fail(f"target '{app.target}' cannot be built on {host}")
 
     # linux: ネイティブ指定が無ければコンテナでビルドする (info / clean / run はホストで実行)
@@ -355,7 +446,24 @@ def main():
         run_in_container(app, args, container_cmds)
         commands = [c for c in commands if c not in container_cmds]
 
-    env = msvc_env() if (app.target == "windows" and host == "windows") else None
+    # Windows ホストでは、web も CMake / Ninja を Visual Studio の開発者環境から使う
+    env = msvc_env() if (app.target in ("windows", "web") and host == "windows") else None
+
+    if app.target == "android":
+        for c in commands:
+            if c in ("configure", "build"):
+                android_build(app, args)
+            elif c == "stage":
+                android_stage(app)
+            elif c == "package":
+                android_package(app, args)
+            elif c == "run":
+                android_run(app)
+            elif c == "clean":
+                clean(app)
+            elif c == "info":
+                info(app)
+        return
 
     for c in commands:
         if c == "configure":

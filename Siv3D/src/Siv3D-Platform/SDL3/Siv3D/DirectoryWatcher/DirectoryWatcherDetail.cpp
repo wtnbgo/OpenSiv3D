@@ -430,7 +430,7 @@ namespace s3d
 	}
 }
 
-# else
+# elif SIV3D_PLATFORM(LINUX)
 
 ////////////////////////////////////////////////////////////////
 //
@@ -695,6 +695,39 @@ namespace s3d
         {
 		    close(m_fd);
         }
+	}
+}
+
+# else
+
+////////////////////////////////////////////////////////////////
+//
+//  Web (Emscripten): ファイルの変更通知は無いので、監視は常に無効
+//
+////////////////////////////////////////////////////////////////
+
+namespace s3d
+{
+	DirectoryWatcher::DirectoryWatcherDetail::DirectoryWatcherDetail(const FilePathView directory)
+		: m_targetDirectory{ directory } {}
+
+	DirectoryWatcher::DirectoryWatcherDetail::~DirectoryWatcherDetail() {}
+
+	bool DirectoryWatcher::DirectoryWatcherDetail::isActive() const
+	{
+		return false;
+	}
+
+	void DirectoryWatcher::DirectoryWatcherDetail::retrieveChanges(Array<FileChange>& fileChanges)
+	{
+		fileChanges.clear();
+	}
+
+	void DirectoryWatcher::DirectoryWatcherDetail::clearChanges() {}
+
+	const FilePath& DirectoryWatcher::DirectoryWatcherDetail::directory() const noexcept
+	{
+		return m_targetDirectory;
 	}
 }
 

@@ -11,8 +11,14 @@
 
 # include <Siv3D/UUIDValue.hpp>
 
-# define UUID_SYSTEM_GENERATOR
+// Android の NDK には libuuid (uuid/uuid.h) が無いので、システムの生成器を使わずに乱数で作る
+# if !defined(__ANDROID__)
+#	define UUID_SYSTEM_GENERATOR
+# endif
 # include <ThirdParty/stduuid/uuid.h>
+# if defined(__ANDROID__)
+#	include <random>
+# endif
 
 namespace s3d
 {
@@ -112,7 +118,12 @@ namespace s3d
 
 	UUIDValue UUIDValue::Generate()
 	{
+	# if defined(__ANDROID__)
+		thread_local std::mt19937 engine{ std::random_device{}() };
+		const uuids::uuid id = uuids::uuid_random_generator{ engine }();
+	# else
 		const uuids::uuid id = uuids::uuid_system_generator{}();
+	# endif
 
 		return detail::ToUUIDValue(id);
 	}

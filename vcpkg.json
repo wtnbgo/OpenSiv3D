@@ -18,10 +18,16 @@
     "boost-smart-ptr",
     "boost-system",
     "boost-uuid",
-    "curl",
+    {
+      "name": "curl",
+      "platform": "!emscripten"
+    },
     "freetype",
     "giflib",
-    "harfbuzz",
+    {
+      "name": "harfbuzz",
+      "platform": "!emscripten & !android"
+    },
     "libjpeg-turbo",
     "libpng",
     "libwebp",
@@ -35,7 +41,7 @@
         "quirc",
         "thread"
       ],
-      "platform": "!linux"
+      "platform": "!linux & !emscripten & !android"
     },
     {
       "name": "opencv4",
@@ -49,9 +55,24 @@
         "quirc",
         "thread"
       ],
-      "platform": "linux"
+      "platform": "linux | android"
     },
-    "opengl",
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": [
+        "calib3d",
+        "jpeg",
+        "png",
+        "webp",
+        "quirc"
+      ],
+      "platform": "emscripten"
+    },
+    {
+      "name": "opengl",
+      "platform": "!emscripten & !android"
+    },
     "opus",
     "opusfile",
     "tiff",

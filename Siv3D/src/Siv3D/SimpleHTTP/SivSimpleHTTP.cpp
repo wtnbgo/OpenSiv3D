@@ -11,6 +11,7 @@
 
 # include <Siv3D/Common.hpp>
 # include <Siv3D/SimpleHTTP.hpp>
+# include <Siv3D/URL.hpp>
 # include <Siv3D/BinaryWriter.hpp>
 # include <Siv3D/MemoryWriter.hpp>
 # include <Siv3D/FileSystem.hpp>
@@ -19,15 +20,20 @@
 # include <Siv3D/Network/INetwork.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 
-# define CURL_STATICLIB
-# if SIV3D_PLATFORM(WINDOWS) | SIV3D_PLATFORM(WEB)
-#	include <ThirdParty-prebuilt/curl/curl.h>
+# if SIV3D_PLATFORM(WEB)
+#	include <Siv3D/Network/WebFetch.hpp> // Web は curl の代わりに Emscripten の fetch API
 # else
-#	include <curl/curl.h>
+#	define CURL_STATICLIB
+#	if SIV3D_PLATFORM(WINDOWS)
+#		include <ThirdParty-prebuilt/curl/curl.h>
+#	else
+#		include <curl/curl.h>
+#	endif
 # endif
 
 namespace s3d
 {
+# if not SIV3D_PLATFORM(WEB)
 	namespace detail
 	{
 		static size_t WriteCallback(const char* ptr, const size_t size, const size_t nmemb, IWriter* pWriter)
@@ -48,6 +54,7 @@ namespace s3d
 			return size_bytes;
 		}
 	}
+# endif
 
 	namespace SimpleHTTP
 	{
@@ -116,6 +123,11 @@ namespace s3d
 				return{};
 			}
 
+		# if SIV3D_PLATFORM(WEB)
+			const detail::WebFetchResult result = detail::WebFetch("GET", URL{ url }, headers, nullptr, 0, writer);
+			return (result.ok ? HTTPResponse{ result.responseHeaders } : HTTPResponse{});
+		# else
+
 			::CURL* curl = ::curl_easy_init();
 			{
 				if (not curl)
@@ -159,6 +171,7 @@ namespace s3d
 			}
 
 			return HTTPResponse{ responseHeaders };
+		# endif
 		}
 
 		HTTPResponse Post(const URLView url, const HashTable<String, String>& headers, const void* src, const size_t size, const FilePathView filePath)
@@ -204,6 +217,11 @@ namespace s3d
 			{
 				return{};
 			}
+
+		# if SIV3D_PLATFORM(WEB)
+			const detail::WebFetchResult result = detail::WebFetch("POST", URL{ url }, headers, src, size, writer);
+			return (result.ok ? HTTPResponse{ result.responseHeaders } : HTTPResponse{});
+		# else
 
 			::CURL* curl = ::curl_easy_init();
 			{
@@ -251,6 +269,7 @@ namespace s3d
 			}
 
 			return HTTPResponse{ responseHeaders };
+		# endif
 		}
 
 		AsyncHTTPTask SaveAsync(const URLView url, const FilePathView filePath)

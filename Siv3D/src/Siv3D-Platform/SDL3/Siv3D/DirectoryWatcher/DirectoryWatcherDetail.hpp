@@ -17,7 +17,7 @@
 #	include <atomic>
 #	include <mutex>
 #	include <CoreServices/CoreServices.h>
-# else
+# elif SIV3D_PLATFORM(LINUX)
 #	include <thread>
 #	include <atomic>
 #	include <mutex>
@@ -101,7 +101,7 @@ namespace s3d
 
 		void processChanges(const size_t eventCount, void* paths, const FSEventStreamEventFlags flags[]);
 
-	# else
+	# elif SIV3D_PLATFORM(LINUX)
 
 		using bimap_t = boost::bimap<int, FilePath>;
 		using bimap_value_t = bimap_t::value_type;
@@ -137,6 +137,11 @@ namespace s3d
 		void update();
 
 		void dispose();
+
+	# else
+
+		// Web (Emscripten): ファイルの変更通知は無い (監視は常に無効)
+		FilePath m_targetDirectory;
 
 	# endif
 	};

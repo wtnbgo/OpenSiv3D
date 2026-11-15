@@ -21,6 +21,20 @@ project(OpenSiv3D
     DESCRIPTION "A C++20 framework for creative coding (2D/3D games, media art, visualizers, and simulators)."
 )
 
+# Linux デスクトップ (Emscripten と Android も UNIX だが、Linux 用の設定は使わない)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
+  set(SIV3D_LINUX_DESKTOP ON)
+else()
+  set(SIV3D_LINUX_DESKTOP OFF)
+endif()
+set(SIV3D_LINUX_DESKTOP ${SIV3D_LINUX_DESKTOP} CACHE INTERNAL "")
+
+if(EMSCRIPTEN)
+  # Web: DirectXMath は wasm の SIMD に対応していないので、組み込み関数を使わない実装にする
+  # (アプリ側のコードも同じ定義でヘッダを読むよう、Siv3D の INTERFACE にも付ける)
+  add_compile_definitions(_XM_NO_INTRINSICS_)
+endif()
+
 # macOS: ゴミ箱 (SivFileSystem_SDL3_macOS.mm) のために Objective-C++ を有効化
 # (enable_language は project() 直後で行わないと生成時に CMAKE_OBJCXX_COMPILE_OBJECT が見つからない)
 if(APPLE)
@@ -36,10 +50,34 @@ find_package(Opus REQUIRED)
 find_package(OpusFile CONFIG REQUIRED)
 find_package(Vorbis REQUIRED)
 find_package(WebP CONFIG REQUIRED)
-find_package(CURL CONFIG REQUIRED)
+if(NOT EMSCRIPTEN)
+  # Web は curl の代わりに Emscripten の fetch API (Siv3D/src/Siv3D/Network/WebFetch.hpp)
+  find_package(CURL CONFIG REQUIRED)
+endif()
 find_package(Boost REQUIRED)
 find_package(Freetype REQUIRED)
-find_package(harfbuzz CONFIG REQUIRED)
+if(EMSCRIPTEN OR ANDROID)
+  # Web / Android: vcpkg の harfbuzz ポートは新しい clang の警告 (-Werror) でビルドできないので、ソースを取得して
+  # まとめ済みのソース (harfbuzz.cc) を FreeType 付きで直接ビルドする
+  include(FetchContent)
+  FetchContent_Declare(harfbuzz_src
+    GIT_REPOSITORY https://github.com/harfbuzz/harfbuzz.git
+    GIT_TAG 11.3.3
+    SOURCE_SUBDIR _siv3d_no_cmake
+  )
+  FetchContent_MakeAvailable(harfbuzz_src)
+  # Siv3D は <harfbuzz/hb.h> でインクルードするので、ヘッダを harfbuzz/ の下にそろえる
+  file(GLOB _siv3d_hb_headers "${harfbuzz_src_SOURCE_DIR}/src/hb*.h")
+  file(COPY ${_siv3d_hb_headers} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/harfbuzz-include/harfbuzz")
+  add_library(Siv3D_ThirdParty_harfbuzz STATIC "${harfbuzz_src_SOURCE_DIR}/src/harfbuzz.cc")
+  # HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR: harfbuzz が #pragma で一部の警告をエラーにする (emcc では未使用テンプレートで止まる) のを止める
+  target_compile_definitions(Siv3D_ThirdParty_harfbuzz PRIVATE HAVE_FREETYPE=1 HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR)
+  target_link_libraries(Siv3D_ThirdParty_harfbuzz PRIVATE Freetype::Freetype)
+  target_include_directories(Siv3D_ThirdParty_harfbuzz PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/harfbuzz-include")
+  add_library(harfbuzz::harfbuzz ALIAS Siv3D_ThirdParty_harfbuzz)
+else()
+  find_package(harfbuzz CONFIG REQUIRED)
+endif()
 find_package(GIF REQUIRED)
 find_package(libjpeg-turbo CONFIG QUIET)
 # find_package(unofficial-mpg123 CONFIG REQUIRED)
@@ -61,8 +99,15 @@ FetchContent_Declare(
   # 安定版に固定する (main は開発版で、取得するたびに変わる)
   GIT_TAG release-3.4.20
 )
-set(SDL_SHARED ON CACHE BOOL "Build SDL shared library")
-set(SDL_STATIC OFF CACHE BOOL "Build SDL static library")
+if(EMSCRIPTEN)
+  # Web: 共有ライブラリは使えないので静的リンク。SDL のスレッドを有効にしないとダミー実装になる
+  set(SDL_SHARED OFF CACHE BOOL "Build SDL shared library" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "Build SDL static library" FORCE)
+  set(SDL_PTHREADS ON CACHE BOOL "SDL pthreads" FORCE)
+else()
+  set(SDL_SHARED ON CACHE BOOL "Build SDL shared library")
+  set(SDL_STATIC OFF CACHE BOOL "Build SDL static library")
+endif()
 FetchContent_MakeAvailable(SDL3)
 
 # ---------------------------------------------
@@ -950,6 +995,27 @@ add_subdirectory(Siv3D/src/ThirdParty/tinyobjloader)
 add_subdirectory(Siv3D/src/ThirdParty/tinyxml)
 add_subdirectory(Siv3D/src/ThirdParty/zstd)
 
+# ---------------------------------------------
+# Web (Emscripten): OS の機能に依存する部分を Web 版の実装 (Siv3D-Platform/Web) に差し替える
+# ---------------------------------------------
+if(EMSCRIPTEN)
+  # "<差し替え元>|<Web 版の実装>" (CPU 情報は arm64 対応で x86 以外にも対応したので差し替え不要)
+  set(_siv3d_web_replacements
+    # スクリプト (AngelScript) は wasm でネイティブ関数を呼べないので無効 (以前の Web 版と同じ)
+    "Siv3D/src/Siv3D/Script/CScript.cpp|Siv3D/src/Siv3D-Platform/Web/Siv3D/Script/CScript.cpp"
+  )
+  # Browser.hpp / TextInput.hpp の Web 専用 API (SDL3 版の実装)
+  list(APPEND SIV3D_SDL3_SOURCES Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Web/SivWeb_SDL3.cpp)
+  foreach(_pair IN LISTS _siv3d_web_replacements)
+    string(REPLACE "|" ";" _pair "${_pair}")
+    list(GET _pair 0 _from)
+    list(GET _pair 1 _to)
+    list(REMOVE_ITEM SIV3D_INTERNAL_SOURCES "${_from}")
+    list(REMOVE_ITEM SIV3D_SDL3_SOURCES "${_from}")
+    list(APPEND SIV3D_SDL3_SOURCES "${_to}")
+  endforeach()
+endif()
+
 set(SIV3D_INTERNAL_INCLUDE_DIRS
   Siv3D/include
   Siv3D/include/ThirdParty
@@ -1015,7 +1081,7 @@ target_link_libraries(Siv3D INTERFACE
   Vorbis::vorbisenc
   Vorbis::vorbisfile
   WebP::webp
-  CURL::libcurl
+  $<$<NOT:$<PLATFORM_ID:Emscripten>>:CURL::libcurl>
   Freetype::Freetype
   harfbuzz::harfbuzz
   GIF::GIF
@@ -1031,8 +1097,15 @@ target_link_libraries(Siv3D
 PUBLIC
   SDL3::SDL3
 )
+if(EMSCRIPTEN OR ANDROID)
+  # Web / Android: harfbuzz はソースからビルドしたもの (vcpkg の include には無い)
+  target_include_directories(Siv3D PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/harfbuzz-include")
+endif()
 # 公開ヘッダは SIV3D_USE_SDL3 で SDL3 版の宣言に切り替わる (Windows の旧ライブラリ指定などを外す) ので、利用側にも伝える
 target_compile_definitions(Siv3D INTERFACE SIV3D_USE_SDL3)
+if(EMSCRIPTEN)
+  target_compile_definitions(Siv3D INTERFACE _XM_NO_INTRINSICS_)
+endif()
 if(SIV3D_WITH_MOVIEPLAYER)
   target_sources(Siv3D PRIVATE
     $<TARGET_OBJECTS:Siv3D_ThirdParty_movieplayer>
@@ -1051,7 +1124,7 @@ if(SIV3D_WITH_MOVIEPLAYER)
     ${SIV3D_MOVIEPLAYER_YUV}
   )
 endif()
-if(UNIX AND NOT APPLE)
+if(SIV3D_LINUX_DESKTOP)
   # stduuid (UUIDValue::Generate) は Linux では libuuid の uuid_generate を使う。
   # 実行時の依存を増やさないよう静的ライブラリを優先する
   find_library(SIV3D_LINUX_UUID_LIBRARY NAMES libuuid.a uuid REQUIRED)
@@ -1129,7 +1202,7 @@ add_library(Siv3D::Siv3D ALIAS Siv3D)
 # Siv3D install settings
 # ライブラリとヘッダの install は OpenSiv3D をトップレベルでビルドしたときだけ (既定)。
 # アプリから add_subdirectory した場合は、アプリの配布物 (cmake --install) に混ざらないよう行わない
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT EMSCRIPTEN)
   set(_siv3d_install_library_default ON)
 else()
   set(_siv3d_install_library_default OFF)
@@ -1185,7 +1258,7 @@ endif()
 # ---------------------------------------------
 set(SIV3D_LINUX_FFMPEG_LIBS "" CACHE INTERNAL "")
 set(SIV3D_LINUX_LICENSE_DIR "" CACHE INTERNAL "")
-if(UNIX AND NOT APPLE)
+if(SIV3D_LINUX_DESKTOP)
   set(SIV3D_LINUX_VCPKG_LIBDIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
   file(GLOB SIV3D_LINUX_FFMPEG_LIBS
     "${SIV3D_LINUX_VCPKG_LIBDIR}/libavcodec.so.*"
