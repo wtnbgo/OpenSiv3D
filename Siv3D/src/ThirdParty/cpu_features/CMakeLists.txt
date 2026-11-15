@@ -1,6 +1,6 @@
 # cpu_features library
 add_library(Siv3D_ThirdParty_cpu_features OBJECT
-  cpuinfo_x86.c
+  cpuinfo_x86_if_x86.c
   filesystem.c
   stack_line_reader.c
   string_view.c
