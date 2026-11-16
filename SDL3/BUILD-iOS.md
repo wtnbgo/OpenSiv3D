@@ -61,6 +61,8 @@ build/ios/simulator-x86_64/
 }
 ```
 
+- `team` などの開発者ごとの値は、アプリのフォルダの `siv3d-app.local.json` (git の管理外にする) に書くと `siv3d-app.json` に重ねて読まれます。環境変数 `SIV3D_IOS_TEAM` / `SIV3D_IOS_DEVICE` でも上書きできます。`siv3d_app.py` は Team ID とバンドル ID を `-DSIV3D_IOS_TEAM` / `-DSIV3D_IOS_BUNDLE_ID_OVERRIDE` で CMake に渡します。
+- 実機は `--sdk device` でビルドし (`-allowProvisioningUpdates -allowProvisioningDeviceRegistration` で自動署名・端末登録)、`run --sdk device [--device <UDID または名前>]` で `xcrun devicectl` を使ってインストールと起動を行います。手順はテンプレート (siv3d_app) の README の「iOS 実機で動かす」を参照してください。
 - Info.plist は `cmake/ios/Info.plist.in` からこの値で生成します。起動画面は `UILaunchScreen` (空) です。
 - シミュレータは ad-hoc 署名 (`-`) なので、Team ID は要りません。実機は "Apple Development" の自動署名で、`team` が必要です。
 

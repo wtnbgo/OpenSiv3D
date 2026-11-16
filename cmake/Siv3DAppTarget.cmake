@@ -395,6 +395,14 @@ END
     _siv3d_json_get(_ios_bundle_id "${_json}" "${_bundle_id}" ios bundleId)
     _siv3d_json_get(_ios_device_family "${_json}" "1,2" ios deviceFamily)
     _siv3d_json_get(_ios_team "${_json}" "" ios team)
+    # 開発者ごとの設定 (siv3d_app.py が siv3d-app.local.json や環境変数 SIV3D_IOS_TEAM から渡す) を優先する。
+    # Team ID はアプリのリポジトリにコミットしないで済むよう、-D で上書きできるようにしている
+    if(DEFINED SIV3D_IOS_TEAM AND NOT SIV3D_IOS_TEAM STREQUAL "")
+      set(_ios_team "${SIV3D_IOS_TEAM}")
+    endif()
+    if(DEFINED SIV3D_IOS_BUNDLE_ID_OVERRIDE AND NOT SIV3D_IOS_BUNDLE_ID_OVERRIDE STREQUAL "")
+      set(_ios_bundle_id "${SIV3D_IOS_BUNDLE_ID_OVERRIDE}")
+    endif()
     set(SIV3D_IOS_BUNDLE_ID "${_ios_bundle_id}")
     set(SIV3D_IOS_EXECUTABLE "${_exe_name}")
 
