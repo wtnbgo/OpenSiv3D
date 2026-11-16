@@ -37,6 +37,15 @@ namespace s3d
 		return System::Update();
 	}
 
+# if SIV3D_PLATFORM(WEB)
+	// Web: System::Update はブラウザに制御を返して次のフレームを待つ (ASYNCIFY)。ネイティブ呼び出し
+	// (as_callfunc_wasm32.cpp) は途中に JS のフレームが入って待てないので、汎用の呼び出し規約で登録する
+	static void ScriptSystemUpdateGeneric(asIScriptGeneric* gen)
+	{
+		gen->SetReturnByte(ScriptSystemUpdate());
+	}
+# endif
+
 	static bool ScriptSystemLaunchBrowser(const String& s)
 	{
 		return System::LaunchBrowser(s);
@@ -53,7 +62,11 @@ namespace s3d
 
 		r = engine->SetDefaultNamespace("System"); assert(r >= 0);
 		{
+		# if SIV3D_PLATFORM(WEB)
+			r = engine->RegisterGlobalFunction("bool Update()", asFUNCTION(ScriptSystemUpdateGeneric), asCALL_GENERIC); assert(r >= 0);
+		# else
 			r = engine->RegisterGlobalFunction("bool Update()", asFUNCTION(ScriptSystemUpdate), asCALL_CDECL); assert(r >= 0);
+		# endif
 			r = engine->RegisterGlobalFunction("void Exit()", asFUNCTION(System::Exit), asCALL_CDECL); assert(r >= 0);
 			r = engine->RegisterGlobalFunction("void SetTerminationTriggers(uint32)", asFUNCTION(System::SetTerminationTriggers), asCALL_CDECL); assert(r >= 0);
 			r = engine->RegisterGlobalFunction("uint32 GetTerminationTriggers()", asFUNCTION(System::GetTerminationTriggers), asCALL_CDECL); assert(r >= 0);

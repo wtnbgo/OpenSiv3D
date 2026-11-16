@@ -59,14 +59,18 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
   `exeName` で分かれます。`siv3d-app.json` の `web.persist` を `false` にすると無効になります。
 - **HTTP**: curl の代わりに Emscripten の fetch API (`Siv3D/src/Siv3D/Network/WebFetch.hpp`)。ブラウザの制約 (CORS) を受けます。
 - **音声**: SoLoud の miniaudio (Web Audio)。
+- **スクリプト (AngelScript)**: ネイティブの呼び出し規約を `ThirdParty/angelscript/as_callfunc_wasm32.cpp` で実装しています。
+  引数を wasm32 の C/C++ ABI どおりに並べ、JS から wasm の関数テーブル経由で呼びます (Siv3D のバインドはそのまま使える)。
+  値渡しの構造体のうち「スカラー 1 つだけ」「空」の型はフラグから判別できないので、同ファイルの表で指定しています
+  (新しい値型をバインドするときは確認が要ります)。呼び出しの途中に JS が入るため、ASYNCIFY で待つ関数は呼べません。
+  そのため `System::Update()` は `asCALL_GENERIC` で登録しています。
 - **依存ライブラリ**: vcpkg の harfbuzz ポートは emcc の `-Werror` で失敗するので、ソースを FetchContent してまとめ済みソースを
   直接ビルドします。opencv4 は最小構成 (calib3d / jpeg / png / webp / quirc、V4L 無効)。curl は使いません。
 
 ## 既知の制限
 
-- **スクリプト (AngelScript)**: 無効です (いまは AS_MAX_PORTABILITY でビルドし、CScript はスタブ)。有効にするには、バインドした関数の
-  呼び出し (ネイティブの呼び出し規約) を wasm で行う仕組みが要ります (以前の Web 版の `as_callfunc_wasm32.cpp` と JS の呼び出し、または全バインドの
-  asCALL_GENERIC 化)。
+- **スクリプト (AngelScript)**: `System::Update()` 以外にも、スクリプトから待つ処理 (ブラウザに制御を返す関数) を新しく
+  バインドするときは、`asCALL_GENERIC` で登録してください (上の「しくみ」を参照)。
 - **動画**: movie-player (libvpx) は vcpkg の libvpx が wasm に対応していないため無効です。OpenCV の動画も読めません。
 - **ダイアログ**: SDL3 のファイルダイアログは Web では使えず、結果なしが返ります。
 - **ファイルの変更監視・ゴミ箱**: 無効です。

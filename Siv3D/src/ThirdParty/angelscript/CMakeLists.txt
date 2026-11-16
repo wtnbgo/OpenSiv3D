@@ -24,6 +24,7 @@ add_library(Siv3D_ThirdParty_angelscript OBJECT
   as_callfunc_x64_msvc.cpp
   ${AS_MSVC_ASM_SOURCES}
   as_callfunc_x86.cpp
+  as_callfunc_wasm32.cpp
   as_callfunc_xenon.cpp
   as_compiler.cpp
   as_configgroup.cpp
@@ -61,7 +62,4 @@ set_target_properties(Siv3D_ThirdParty_angelscript PROPERTIES
   DEBUG_POSTFIX "d"
 )
 
-# Web (wasm) にはネイティブの呼び出し規約の実装が無いので、移植性優先のモードにする (Web 版ではスクリプト自体も無効)
-if(EMSCRIPTEN)
-  target_compile_definitions(Siv3D_ThirdParty_angelscript PRIVATE AS_MAX_PORTABILITY)
-endif()
+# Web (wasm32) のネイティブ呼び出しは as_callfunc_wasm32.cpp (JS から wasm の関数テーブル経由で呼ぶ)

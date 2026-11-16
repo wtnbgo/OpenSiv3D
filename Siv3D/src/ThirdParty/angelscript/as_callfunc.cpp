@@ -134,7 +134,7 @@ int DetectCallingConvention(bool isMethod, const asSFuncPtr &ptr, int callConv, 
 				internal->callConv = (internalCallConv)(thisCallConv + 2);
 #endif
 			internal->baseOffset = ( int )MULTI_BASE_OFFSET(ptr);
-#if (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS)) && (defined(__GNUC__) || defined(AS_PSVITA))
+#if ((defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS)) && (defined(__GNUC__) || defined(AS_PSVITA))) || defined(AS_WASM32) // [Siv3D] wasm32 も ARM 式のメンバ関数ポインタ
 			// As the least significant bit in func is used to switch to THUMB mode
 			// on ARM processors, the LSB in the __delta variable is used instead of
 			// the one in __pfn on ARM processors.
@@ -349,6 +349,19 @@ int PrepareSystemFunction(asCScriptFunction *func, asSSystemFunctionInterface *i
 				}
 #endif
 			}
+
+#if defined(AS_WASM32)
+			// [Siv3D] wasm32: スカラー 1 つだけの構造体はそのスカラーとして返る (それ以外は sret)
+			{
+				const char kind = asWasm32ValueKind(func->returnType.GetTypeInfo());
+				if( !(objType & COMPLEX_RETURN_MASK) && (kind == 'i' || kind == 'j' || kind == 'f' || kind == 'd') )
+				{
+					internal->hostReturnInMemory = false;
+					internal->hostReturnSize     = func->returnType.GetSizeInMemoryDWords();
+					internal->hostReturnFloat    = (kind == 'f' || kind == 'd');
+				}
+			}
+#endif
 
 #ifdef SPLIT_OBJS_BY_MEMBER_TYPES
 			// It's not safe to return objects by value because different registers
@@ -618,7 +631,7 @@ int CallSystemFunction(int id, asCContext *context)
 		}
 		
 		// Add the base offset for multiple inheritance
-#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA)
+#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA) || defined(AS_WASM32)
 		// On GNUC + ARM the lsb of the offset is used to indicate a virtual function
 		// and the whole offset is thus shifted one bit left to keep the original
 		// offset resolution
@@ -652,7 +665,7 @@ int CallSystemFunction(int id, asCContext *context)
 		if( obj )
 		{
 			// Add the base offset for multiple inheritance
-#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA)
+#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA) || defined(AS_WASM32)
 			// On GNUC + ARM the lsb of the offset is used to indicate a virtual function
 			// and the whole offset is thus shifted one bit left to keep the original
 			// offset resolution
@@ -679,7 +692,7 @@ int CallSystemFunction(int id, asCContext *context)
 			}
 
 			// Add the base offset for multiple inheritance
-#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA)
+#if (defined(__GNUC__) && (defined(AS_ARM64) || defined(AS_ARM) || defined(AS_MIPS))) || defined(AS_PSVITA) || defined(AS_WASM32)
 			// On GNUC + ARM the lsb of the offset is used to indicate a virtual function
 			// and the whole offset is thus shifted one bit left to keep the original
 			// offset resolution

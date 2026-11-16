@@ -1024,10 +1024,8 @@ add_subdirectory(Siv3D/src/ThirdParty/zstd)
 # ---------------------------------------------
 if(EMSCRIPTEN)
   # "<差し替え元>|<Web 版の実装>" (CPU 情報は arm64 対応で x86 以外にも対応したので差し替え不要)
-  set(_siv3d_web_replacements
-    # スクリプト (AngelScript) は wasm でネイティブ関数を呼べないので無効 (以前の Web 版と同じ)
-    "Siv3D/src/Siv3D/Script/CScript.cpp|Siv3D/src/Siv3D-Platform/Web/Siv3D/Script/CScript.cpp"
-  )
+  # (スクリプト (AngelScript) は差し替えない。ネイティブ呼び出しは ThirdParty/angelscript/as_callfunc_wasm32.cpp)
+  set(_siv3d_web_replacements)
   # Browser.hpp / TextInput.hpp の Web 専用 API (SDL3 版の実装)
   list(APPEND SIV3D_SDL3_SOURCES Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Web/SivWeb_SDL3.cpp)
   foreach(_pair IN LISTS _siv3d_web_replacements)

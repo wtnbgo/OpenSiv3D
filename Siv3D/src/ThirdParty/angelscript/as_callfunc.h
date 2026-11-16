@@ -55,6 +55,13 @@ int PrepareSystemFunctionGeneric(asCScriptFunction *func, asSSystemFunctionInter
 
 int PrepareSystemFunction(asCScriptFunction *func, asSSystemFunctionInterface *internal, asCScriptEngine *engine);
 
+#if defined(AS_WASM32) && !defined(AS_MAX_PORTABILITY)
+// [Siv3D] 値渡しの型の wasm32 ABI 上の扱い (as_callfunc_wasm32.cpp)。0: ポインタ (戻り値は sret)、
+// 'i' / 'j' / 'f' / 'd': そのスカラーとして、'e': 空の構造体 (渡さない)
+class asCTypeInfo;
+char asWasm32ValueKind(const asCTypeInfo *typeInfo);
+#endif
+
 int CallSystemFunction(int id, asCContext *context);
 
 inline asPWORD FuncPtrToUInt(asFUNCTION_t func)
