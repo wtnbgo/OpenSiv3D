@@ -1062,6 +1062,12 @@ namespace s3d
 						}
 					}
 
+					// IME の変換候補のウィンドウなどを、カーソル (変換中の文字の先頭) の下に出す
+					if (text.active && enabled)
+					{
+						TextInput::SetEditingArea(RectF{ editingTextPos.x, region.y, 1, region.h });
+					}
+
 					// テキスト入力カーソルの描画
 					if (text.active && enabled)
 					{
@@ -2196,6 +2202,12 @@ namespace s3d
 					region
 						.draw(ColorF{ 0.9 })
 						.drawFrame(2.0, 0.0, ColorF{ 0.67 });
+				}
+
+				// IME の変換候補のウィンドウなどを、カーソルの行の下に出す
+				if (text.active && enabled)
+				{
+					TextInput::SetEditingArea(RectF{ textCursorLineX, textCursorLineY0, 1, Max(textCursorLineY1 - textCursorLineY0, 1.0) });
 				}
 
 				// テキスト入力カーソルの描画

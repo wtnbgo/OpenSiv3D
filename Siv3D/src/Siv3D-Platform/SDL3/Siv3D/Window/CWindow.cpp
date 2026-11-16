@@ -100,6 +100,10 @@ namespace s3d
 		}
 	# endif
 
+		// IME の変換中の文字は Siv3D 側 (SimpleGUI のテキストボックスなど) で描くので、OS 側では表示しない。
+		// 変換候補のウィンドウは OS に任せる (TextInput::SetEditingArea で位置を伝える)
+		SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
+
 		if (not SDL_Init(SDL_INIT_VIDEO))
 		{
 			throw EngineError(U"SDL_Init() failed: {}"_fmt(Unicode::Widen(SDL_GetError())));
@@ -186,6 +190,12 @@ namespace s3d
 			else if (event.type == SDL_EVENT_TEXT_EDITING)
 			{
 				static_cast<CTextInput*>(SIV3D_ENGINE(TextInput))->onTextEditing(event.edit.text, event.edit.start, event.edit.length);
+			}
+
+			// BS / Delete / Enter / Tab を文字入力に加える (押しっぱなしの繰り返しも)
+			if (event.type == SDL_EVENT_KEY_DOWN)
+			{
+				static_cast<CTextInput*>(SIV3D_ENGINE(TextInput))->onKeyDown(event.key.scancode);
 			}
 
 		# if SIV3D_PLATFORM(IOS)

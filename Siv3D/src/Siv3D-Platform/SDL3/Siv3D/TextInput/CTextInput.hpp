@@ -43,7 +43,12 @@ namespace s3d
 
 		const Array<UnderlineStyle>& getEditingTextStyle() const override;
 		
+		void setEditingArea(const RectF& sceneArea) override;
+
 		void onTextInput(const char* text);
+
+		// キーの押下 (繰り返しを含む)。BS / Delete / Enter / Tab を制御文字として文字入力に加える
+		void onKeyDown(SDL_Scancode scancode);
 
 		void onTextEditing(const char* text, int32 start, int32 length);
 
@@ -86,6 +91,9 @@ namespace s3d
 		int32 m_idleFrames = 0;
 
 		int32 m_requestedFrames = 0;
+
+		// SDL に伝えた入力の場所 (ウィンドウの座標)。同じなら呼ばない
+		SDL_Rect m_editingArea{ -1, -1, 0, 0 };
 
 		void setTextInputActive(bool active);
 	};

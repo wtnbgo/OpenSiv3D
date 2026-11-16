@@ -68,6 +68,12 @@ namespace s3d
 		/// @return 変換待ちのテキスト
 		[[nodiscard]]
 		String GetEditingText();
+
+		/// @brief 文字を入力している場所 (テキストボックスのカーソルの位置など) を IME に伝えます。
+		/// @param area 入力している場所 (シーンの座標。現在の 2D の座標変換とカメラを適用します)
+		/// @remark IME の変換候補のウィンドウなどが、この位置の近くに表示されます。SimpleGUI のテキストボックスは自動で呼びます。
+		/// @remark SDL3 版で追加。それ以外の版では何もしません。
+		void SetEditingArea(const RectF& area);
 	}
 
 # if SIV3D_PLATFORM(WINDOWS)

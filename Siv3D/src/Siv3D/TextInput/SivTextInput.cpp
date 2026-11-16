@@ -12,6 +12,8 @@
 # include <Siv3D/TextInput.hpp>
 # include <Siv3D/Char.hpp>
 # include <Siv3D/Scene.hpp>
+# include <Siv3D/Graphics2D.hpp>
+# include <Siv3D/Mat3x2.hpp>
 # include <Siv3D/Indexed.hpp>
 # include <Siv3D/DrawableText.hpp>
 # include <Siv3D/UnderlineStyle.hpp>
@@ -22,6 +24,16 @@ namespace s3d
 {
 	namespace TextInput
 	{
+		void SetEditingArea(const RectF& area)
+		{
+			const Mat3x2 transform = (Graphics2D::GetLocalTransform() * Graphics2D::GetCameraTransform());
+			const Vec2 p0 = transform.transformPoint(area.tl());
+			const Vec2 p1 = transform.transformPoint(area.br());
+			const Vec2 tl{ Min(p0.x, p1.x), Min(p0.y, p1.y) };
+			const Vec2 br{ Max(p0.x, p1.x), Max(p0.y, p1.y) };
+			SIV3D_ENGINE(TextInput)->setEditingArea(RectF{ tl, (br - tl) });
+		}
+
 		String GetRawInput()
 		{
 			return SIV3D_ENGINE(TextInput)->getChars();

@@ -12,9 +12,11 @@
 # include <utility>
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/FormatLiteral.hpp>
+# include <Siv3D/2DShapes.hpp>
 # include <Siv3D/Keyboard.hpp>
 # include <Siv3D/Unicode.hpp>
 # include <Siv3D/Window/IWindow.hpp>
+# include <Siv3D/Renderer/IRenderer.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
 # include "CTextInput.hpp"
 
@@ -119,6 +121,75 @@ namespace s3d
 			
 			m_preeditCaret = m_internalPreeditCaret;
 		}
+	}
+
+	void CTextInput::setEditingArea(const RectF& sceneArea)
+	{
+		if (not m_window)
+		{
+			return;
+		}
+
+		// シーンの座標 → ウィンドウの座標 (SDL のポイント)。拡大表示の余白とピクセル密度を考慮する
+		const auto [s, viewRect] = SIV3D_ENGINE(Renderer)->getLetterboxComposition();
+		float density = SDL_GetWindowPixelDensity(m_window);
+		if (density <= 0.0f) { density = 1.0f; }
+		const Vec2 tl = ((sceneArea.tl() * s + viewRect.pos) / density);
+		const Vec2 size = (sceneArea.size * s / density);
+
+		const SDL_Rect rect{ static_cast<int>(tl.x), static_cast<int>(tl.y),
+			Max(static_cast<int>(size.x), 1), Max(static_cast<int>(size.y), 1) };
+
+		if ((rect.x == m_editingArea.x) && (rect.y == m_editingArea.y) && (rect.w == m_editingArea.w) && (rect.h == m_editingArea.h))
+		{
+			return;
+		}
+
+		m_editingArea = rect;
+		SDL_SetTextInputArea(m_window, &rect, 0);
+	}
+
+	void CTextInput::onKeyDown(const SDL_Scancode scancode)
+	{
+		// SDL3 は BS などを SDL_EVENT_TEXT_INPUT で送らない。元の Siv3D (Windows の WM_CHAR など) と同じく
+		// 制御文字として文字入力に加え、TextInput::UpdateText で処理する
+		char32 ch = 0;
+
+		switch (scancode)
+		{
+		case SDL_SCANCODE_BACKSPACE:
+			ch = U'';
+			break;
+		case SDL_SCANCODE_DELETE:
+			ch = char32(0x7F);
+			break;
+		case SDL_SCANCODE_RETURN:
+		case SDL_SCANCODE_KP_ENTER:
+			ch = U'';
+			break;
+		case SDL_SCANCODE_TAB:
+			ch = U'	';
+			break;
+		default:
+			return;
+		}
+
+		if (not m_textInputStarted)
+		{
+			return;
+		}
+
+		{
+			// IME で変換中 (このフレームか前のフレーム) のキーは IME の操作 (変換中の文字の削除・確定) なので加えない
+			std::lock_guard lock{ m_mutexPreeditStatus };
+
+			if (m_internalPreeditText || m_preeditText)
+			{
+				return;
+			}
+		}
+
+		pushChar(static_cast<uint32>(ch));
 	}
 
 	void CTextInput::pushChar(const uint32 ch)

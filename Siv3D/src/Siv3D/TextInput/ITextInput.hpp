@@ -42,5 +42,8 @@ namespace s3d
 		virtual std::pair<int32, int32> getCursorIndex() const = 0;
 
 		virtual const Array<UnderlineStyle>& getEditingTextStyle() const { static const Array<UnderlineStyle> _empty; return _empty; }
+
+		// 文字を入力している場所 (シーンの座標。座標変換は適用済み) を IME に伝える (SDL3 版のみ)
+		virtual void setEditingArea([[maybe_unused]] const RectF& sceneArea) {}
 	};
 }
