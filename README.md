@@ -121,20 +121,35 @@
 
 ## SDL3 Port (SDL3 版)
 
-This branch adds an **SDL3 + OpenGL ES 3.0** backend that builds from a single CMake project (vcpkg + Ninja Multi-Config) on Windows, Linux and macOS.
+This branch adds an **SDL3 + OpenGL ES 3.0** backend that builds from a single CMake project (vcpkg + Ninja Multi-Config) for Windows, Linux, macOS, the Web, Android and iOS.
 
-このブランチには、Windows / Linux / macOS を 1 つの CMake プロジェクト (vcpkg + Ninja Multi-Config) でビルドできる **SDL3 + OpenGL ES 3.0** バックエンドが入っています。
+このブランチには、Windows / Linux / macOS / Web / Android / iOS を 1 つの CMake プロジェクト (vcpkg + Ninja Multi-Config) でビルドできる **SDL3 + OpenGL ES 3.0** バックエンドが入っています。
 
 | Platform | Build guide | Toolchain / Notes |
 |:--:|:--|:--|
 | Windows | [SDL3/BUILD-Windows.md](SDL3/BUILD-Windows.md) | Visual Studio 2026 (MSVC 14.51), `x64-windows` preset, static vcpkg libraries |
 | Linux | [SDL3/BUILD_LINUX.md](SDL3/BUILD_LINUX.md) | Built in the Steam Runtime 3.0 "sniper" SDK (glibc 2.31, gcc-14) for wide distro compatibility. No GTK / glib dependency |
 | macOS | [SDL3/BUILD-macOS.md](SDL3/BUILD-macOS.md) | Apple clang, `x64-osx` preset. OpenGL ES runs on Metal via ANGLE bundled in the `.app` |
+| Web | [SDL3/BUILD-Web.md](SDL3/BUILD-Web.md) | Emscripten 6.0.6, `wasm32-emscripten` preset, WebGL 2. Uses pthreads, so the page must be served with COOP / COEP headers |
+| Android | [wtnbgo/siv3d_and](https://github.com/wtnbgo/siv3d_and) | Gradle shell project, NDK 27, `arm64-v8a` / `x86_64`. APK and AAB |
+| iOS | [SDL3/BUILD-iOS.md](SDL3/BUILD-iOS.md) | Xcode, simulator and device ([wtnbgo/siv3d_ios](https://github.com/wtnbgo/siv3d_ios)) |
 
 ```bash
-cmake --preset <x64-windows | x64-linux | x64-osx> -DSIV3D_BUILD_SAMPLE=ON
+cmake --preset <x64-windows | x64-linux | x64-osx | wasm32-emscripten> -DSIV3D_BUILD_SAMPLE=ON
 cmake --build build/<preset> --config Release
 ```
+
+To build your own app for every platform, start from the app template **[wtnbgo/siv3d_app](https://github.com/wtnbgo/siv3d_app)** (`make windows` / `make web` / `make android` / `make ios` …, build + stage + package).
+
+アプリは、テンプレート **[wtnbgo/siv3d_app](https://github.com/wtnbgo/siv3d_app)** から作ると、各機種向けのビルド・配布物の作成までを `make` でできます。
+
+Other documents (その他の資料):
+
+| Document | Contents |
+|:--|:--|
+| [SDL3/LICENSES.md](SDL3/LICENSES.md) | License notices of bundled libraries, and what each platform needs (in-app license screen on Android / iOS) |
+| [SDL3/DEBUG.md](SDL3/DEBUG.md) | Log file (`SIV3D_LOG_FILE`) and the simple REPL for automated testing (`SIV3D_REPL_FILE`, removed with `SIV3D_WITH_REPL=OFF`) |
+| [SDL3/SIGNING.md](SDL3/SIGNING.md) | Code signing / notarization for distribution (Windows, macOS, Android, iOS) |
 
 Common implementation across platforms (全 OS 共通の実装):
 
@@ -145,11 +160,15 @@ Common implementation across platforms (全 OS 共通の実装):
 - **Video** (`VideoReader` / `VideoTexture`):
   - WebM (VP8 / VP9) on every platform with [movie-player](https://github.com/wamsoft/movie-player) (libvpx, MIT). `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` also plays the WebM's audio track (Vorbis / Opus) in sync, via `getAudio()`
   - Other formats (MP4 etc.) with OpenCV: Media Foundation on Windows, AVFoundation on macOS, FFmpeg on Linux (LGPL build bundled as shared libraries)
-- **CMake options**: `SIV3D_WITH_MOVIEPLAYER` (default ON) and `SIV3D_WITH_FFMPEG` (default ON, Linux only). With `-DSIV3D_WITH_FFMPEG=OFF` no FFmpeg (LGPL) is built or bundled; Linux can then open WebM only
+- **Text input / IME**: SDL3 text input (`SDL_EVENT_TEXT_INPUT` / `TEXT_EDITING`). The IME candidate window is placed at the text cursor via `TextInput::SetEditingArea()` (added in the SDL3 port; called automatically by `SimpleGUI::TextBox` / `TextArea`). On Android / iOS the on-screen keyboard is shown only while a text box is being edited
+- **CMake options**: `SIV3D_WITH_MOVIEPLAYER` (default ON), `SIV3D_WITH_FFMPEG` (default ON, Linux only) and `SIV3D_WITH_REPL` (default ON; set OFF for master releases). With `-DSIV3D_WITH_FFMPEG=OFF` no FFmpeg (LGPL) is built or bundled; Linux can then open WebM only
 
 Known limitations (主な制限):
 
 - AAC / WMA audio files cannot be loaded; pitch shift (SoundTouch) is disabled
+- File dialogs are not available on the Web, Android and iOS (they return no result)
+- Web: Japanese (IME) input is not supported (SDL3's Emscripten backend has no composition support); per-key input works
+- iOS simulator: Backspace on the on-screen keyboard does not work (SDL ignores it while a hardware keyboard is attached)
 - Linux: `FileSystem::Remove(path, AllowUndo::Yes)` fails on system-internal mounts such as tmpfs `/tmp` (same as GIO)
 - macOS: only Intel (x86_64) has been tested; `arm64-osx` is untested
 - Other platform-specific limitations are listed in each build guide (詳細は各ビルド手順書を参照)

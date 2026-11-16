@@ -79,3 +79,4 @@ Siv3DApp.exe
 - WebM (VP9 1080p 30fps、音声付き、DefaultDuration 無し) を `VideoReader` で開き、フレームレートの推定 (30.000)・フレームの取得・シークができること、`VideoTexture` で描画できること
 - 同じ WebM を `VideoTexture(path, Loop::Yes, PlayAudio::Yes)` で音声付き再生し、再生位置が音声の時計に従って進むこと、`getAudio().pause()` で映像も止まること、`setPosSec()` でシークできること
 - 音声が Vorbis (2ch)・Opus (2ch)・Opus (1ch) の WebM で、トラック構成の判定 (ログ) と音声付き再生ができること。3 本とも実際に音が聞こえ、映像と音声がずれていないことを耳で確認
+- 2026-11-16、`SimpleGUI::TextBox` への文字入力: 英字と日本語 IME (変換中の文字はボックス内、変換候補はボックスの下に出る)、BS (押しっぱなしで連続削除)・Delete、IME の変換中の BS で確定済みの文字が消えないこと

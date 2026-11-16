@@ -277,3 +277,7 @@ WebM (movie-player、`title.webm`: VP9 1920x1080 + Vorbis 2ch 48kHz、97.90 秒)
 実際の音も確認した (2026-11-15、PipeWire 環境のスピーカー): `title.webm` (Vorbis 2ch)・Opus 2ch・Opus 1ch の
 3 本とも音が聞こえ、映像と音声のずれは感じられなかった (Opus の先頭の無音 (pre-skip) によるずれも無し)。
 このとき 4 秒後の映像 / 音声の再生位置は 4.03 / 4.02 秒 (Opus 1ch は 4.02 / 4.01 秒)。
+
+文字入力は 2026-11-16 に確認した (Wayland / X11 とも、ibus。`XMODIFIERS=@im=ibus`)。`SimpleGUI::TextBox` に英字と
+日本語 IME の確定が入り、変換中の文字の表示・変換候補のウィンドウの位置・BS / Delete に問題が無く、IME の変換中の
+BS / Enter で確定済みの文字が消えたり改行が入ったりしないこと。
