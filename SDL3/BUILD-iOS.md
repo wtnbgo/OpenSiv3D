@@ -20,7 +20,7 @@ SDL3 + OpenGL ES 3.0 バックエンドを iOS でビルドし、シミュレー
 
 ## アプリをビルドする (siv3d_app のテンプレート)
 
-アプリのテンプレート (`SDL3/AppTemplate` または siv3d_app リポジトリ) を使う場合は、ビルドドライバ `tools/siv3d_app.py` に `--target ios` を指定します。
+アプリのテンプレート ([siv3d_app](https://github.com/wtnbgo/siv3d_app) リポジトリ) を使う場合は、ビルドドライバ `tools/siv3d_app.py` に `--target ios` を指定します。
 
 ```bash
 # シミュレータ向けにビルド → stage (.app) → package (zip)
