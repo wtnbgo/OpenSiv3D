@@ -21,14 +21,17 @@ namespace s3d
 	/// @brief 音声付きの WebM を movie-player (IMoviePlayer) で再生するクラス (VideoTexture の PlayAudio::Yes 用)
 	/// @remark 映像は音声の時計に同期してデコードされ、最新のフレームを fetchFrame で取り出す。
 	/// 音声は IAudioSink → IAudioStream の橋渡しで Siv3D の Audio として鳴らす。
+	/// Web (Emscripten) ではブラウザの <video> 要素で再生する別実装 (Siv3D-Platform/SDL3/Siv3D/Web/WebVideoPlayer_SDL3.cpp) で、
+	/// 音声の有無にかかわらず VideoTexture の再生に使う (音声は <video> が直接鳴らし、audio() は空)。
 	class WebMPlayer
 	{
 	public:
 
 		/// @brief 音声付きの WebM を開きます。
+		/// @param playAudio Web 版のみ: false なら音を出さない (デスクトップ版は音声付きのときだけ呼ばれるので無視する)
 		/// @return WebM でない、音声トラックが無い、または開けない場合 nullptr
 		[[nodiscard]]
-		static std::unique_ptr<WebMPlayer> Create(FilePathView path, bool loop);
+		static std::unique_ptr<WebMPlayer> Create(FilePathView path, bool loop, bool playAudio = true);
 
 		~WebMPlayer();
 

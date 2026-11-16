@@ -59,6 +59,10 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
   `exeName` で分かれます。`siv3d-app.json` の `web.persist` を `false` にすると無効になります。
 - **HTTP**: curl の代わりに Emscripten の fetch API (`Siv3D/src/Siv3D/Network/WebFetch.hpp`)。ブラウザの制約 (CORS) を受けます。
 - **音声**: SoLoud の miniaudio (Web Audio)。
+- **動画**: libvpx などのデコーダを wasm に移植せず、ブラウザの `<video>` 要素にデコード・音声・同期を任せます
+  (`Siv3D-Platform/SDL3/Siv3D/Web/WebVideoPlayer_SDL3.cpp`。吉里吉里Z の Web 版と同じ方式)。仮想ファイルシステムのファイルを
+  Blob URL にして渡し、`requestVideoFrameCallback` で新しいフレームを検知して `drawImage` → `getImageData` でテクスチャに写します。
+  WebM (VP8 / VP9 + Vorbis / Opus) のほか、ブラウザが再生できる MP4 なども開けます。`PlayAudio::No` ならミュートします。
 - **スクリプト (AngelScript)**: ネイティブの呼び出し規約を `ThirdParty/angelscript/as_callfunc_wasm32.cpp` で実装しています。
   引数を wasm32 の C/C++ ABI どおりに並べ、JS から wasm の関数テーブル経由で呼びます (Siv3D のバインドはそのまま使える)。
   値渡しの構造体のうち「スカラー 1 つだけ」「空」の型はフラグから判別できないので、同ファイルの表で指定しています
@@ -71,7 +75,9 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
 
 - **スクリプト (AngelScript)**: `System::Update()` 以外にも、スクリプトから待つ処理 (ブラウザに制御を返す関数) を新しく
   バインドするときは、`asCALL_GENERIC` で登録してください (上の「しくみ」を参照)。
-- **動画**: movie-player (libvpx) は vcpkg の libvpx が wasm に対応していないため無効です。OpenCV の動画も読めません。
+- **動画**: `VideoTexture` はブラウザの `<video>` で再生します (下記)。`VideoReader` (フレーム単位の読み出し) は使えません。
+  `VideoTexture::getAudio()` の `Audio` は空で、音量などの操作は効きません (音は `<video>` が直接鳴らします)。
+  音付きの動画は、ブラウザの自動再生の制限でページを操作するまで始まらないことがあります (始まらなければ次のクリック・キー入力で再試行します)。
 - **ダイアログ**: SDL3 のファイルダイアログは Web では使えず、結果なしが返ります。
 - **ファイルの変更監視・ゴミ箱**: 無効です。
 - **セーブデータ**: カレントディレクトリ (`/`) の直下に書いたファイルは保存されません (ページを閉じると消えます)。ホームフォルダの下に書いてください。

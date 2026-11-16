@@ -421,7 +421,7 @@ namespace s3d
 		bool m_hasNewFrame = false;
 	};
 
-	std::unique_ptr<WebMPlayer> WebMPlayer::Create(const FilePathView path, const bool loop)
+	std::unique_ptr<WebMPlayer> WebMPlayer::Create(const FilePathView path, const bool loop, bool)
 	{
 		auto detail = std::make_unique<WebMPlayerDetail>();
 

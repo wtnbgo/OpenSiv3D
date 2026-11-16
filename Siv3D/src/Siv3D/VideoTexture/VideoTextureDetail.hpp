@@ -60,10 +60,13 @@ namespace s3d
 
 		VideoReader m_videoReader;
 
-		// PlayAudio::Yes で音声付きの WebM を開いた場合だけ使う (映像も movie-player が再生する)
+		// PlayAudio::Yes で音声付きの WebM を開いた場合に使う (映像も movie-player が再生する)。Web 版は常に使う
 		std::unique_ptr<WebMPlayer> m_player;
 
 		Audio m_emptyAudio;
+
+		// m_player が音を鳴らすか (Web 版は PlayAudio::No でもプレーヤーで再生する)
+		bool m_hasAudio = false;
 
 		bool m_loop = false;
 

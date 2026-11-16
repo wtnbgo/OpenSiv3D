@@ -11,7 +11,13 @@
 
 # include "VideoTextureDetail.hpp"
 # include <Siv3D/EngineLog.hpp>
-# if defined(SIV3D_WITH_MOVIEPLAYER)
+
+// WebMPlayer を使うか: movie-player (SIV3D_WITH_MOVIEPLAYER) か、Web 版 (ブラウザの <video> で再生する実装)
+# if defined(SIV3D_WITH_MOVIEPLAYER) || SIV3D_PLATFORM(WEB)
+#	define SIV3D_VIDEO_USE_PLAYER 1
+# endif
+
+# if defined(SIV3D_VIDEO_USE_PLAYER)
 #	include "WebMPlayer.hpp"
 # else
 namespace s3d
@@ -33,11 +39,20 @@ namespace s3d
 		m_loop = loop.getBool();
 		m_isSRGB = detail::IsSRGB(desc);
 
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
+	# if SIV3D_PLATFORM(WEB)
+		// Web: VideoReader (OpenCV / movie-player) が無いので、常にブラウザの <video> で再生する
+		// (PlayAudio::No なら音を出さない)。WebM のほか、ブラウザが再生できる形式 (MP4 など) も開ける
+		{
+			m_player = WebMPlayer::Create(path, m_loop, playAudio.getBool());
+			m_hasAudio = playAudio.getBool();
+	# else
 		// 音声付きの WebM は movie-player のプレーヤーで映像と音声を同期して再生する
 		if (playAudio)
 		{
 			m_player = WebMPlayer::Create(path, m_loop);
+			m_hasAudio = true;
+	# endif
 
 			if (m_player)
 			{
@@ -62,7 +77,7 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::advance(const double deltaTimeSec)
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			// 再生位置は音声の時計に従うので deltaTimeSec は使わない
@@ -97,7 +112,7 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::reset()
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			m_player->seek(0.0);
@@ -122,7 +137,7 @@ namespace s3d
 
 	double VideoTexture::VideoTextureDetail::posSec() const noexcept
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			return m_player->posSec();
@@ -134,7 +149,7 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::setPosSec(const double posSec)
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			m_player->seek(Clamp(posSec, 0.0, m_player->lengthSec()));
@@ -147,7 +162,7 @@ namespace s3d
 
 	double VideoTexture::VideoTextureDetail::lengthSec() const
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			return m_player->lengthSec();
@@ -169,12 +184,12 @@ namespace s3d
 
 	bool VideoTexture::VideoTextureDetail::hasAudio() const noexcept
 	{
-		return static_cast<bool>(m_player);
+		return (m_player && m_hasAudio);
 	}
 
 	const Audio& VideoTexture::VideoTextureDetail::getAudio() const noexcept
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player)
 		{
 			return m_player->audio();
@@ -267,7 +282,7 @@ namespace s3d
 
 	void VideoTexture::VideoTextureDetail::updateFromPlayer()
 	{
-	# if defined(SIV3D_WITH_MOVIEPLAYER)
+	# if defined(SIV3D_VIDEO_USE_PLAYER)
 		if (m_player->fetchFrame(m_frameImage))
 		{
 			uploadFrame(true);
