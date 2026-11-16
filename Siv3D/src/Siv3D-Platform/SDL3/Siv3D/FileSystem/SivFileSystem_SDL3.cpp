@@ -713,7 +713,11 @@ namespace s3d
 
 			const static Array<FilePath> g_resourceFilePaths = []()
 			{
+			# if SIV3D_PLATFORM(IOS)
+				Array<FilePath> paths = FileSystem::DirectoryContents(U"siv3d_resources/", Recursive::Yes); // SivResource_SDL3.cpp を参照
+			# else
 				Array<FilePath> paths = FileSystem::DirectoryContents(U"resources/", Recursive::Yes);
+			# endif
 
 				paths.remove_if(FileSystem::IsDirectory);
 				
@@ -735,7 +739,11 @@ namespace s3d
 		{
 			// ParentPath() は IsResourcePath() を呼ぶので (再帰になる) ここでは使わない
 			const FilePath& modulePath = FileSystem::ModulePath();
+		# if SIV3D_PLATFORM(IOS)
+			const FilePath resourceDirectory = (modulePath.substr(0, (modulePath.lastIndexOf(U'/') + 1)) + U"siv3d_resources/"); // SivResource_SDL3.cpp を参照
+		# else
 			const FilePath resourceDirectory = (modulePath.substr(0, (modulePath.lastIndexOf(U'/') + 1)) + U"resources/");
+		# endif
 
 			return FullPath(path).starts_with(resourceDirectory);
 		}
