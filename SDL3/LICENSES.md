@@ -86,5 +86,5 @@ for (const auto& license : LicenseManager::EnumLicenses())
 著作権表示とライセンス文を添えることを求めています。テンプレート siv3d_app は、この 3 つのライセンスを `assets/licenses/`
 (`noto-sans-cjk.txt` / `mplus.txt` / `font-awesome.txt`) に置き、`AddLicenseFiles()` で一覧に追加しています
 (使わないフォントを `resources/engine/font/` から外した場合は、対応するファイルも消してかまいません)。
-日本語のフォールバック用の `min/siv3d-min.woff` は、同梱の LICENSE が OFL ですが元のフォントと著作権者の記載がないため、
-テンプレートには含めていません。
+予備のフォント `min/siv3d-min.woff` は、Noto Sans JP 2.004 (© 2014-2021 Adobe、OFL) から英数字・記号など 198 文字を
+抜き出したもの (フォントの name テーブルで確認) なので、`noto-sans-cjk.txt` のライセンスに含まれます。
