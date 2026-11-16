@@ -54,6 +54,8 @@ namespace s3d
 					state = MouseButtonState::Released;
 				}
 			}
+
+			m_downSinceUpdate.fill(false);
 		}
 
 		{
@@ -94,16 +96,18 @@ namespace s3d
         
         if (pressed)
         {
-            if (m_buttonsInternal[index] == MouseButtonState::Released)
+            if (m_buttonsInternal[index] != MouseButtonState::Pressed)
             {
                 m_buttonsInternal[index] = MouseButtonState::Pressed;
+                m_downSinceUpdate[index] = true;
             }
         }
         else
         {
             if (m_buttonsInternal[index] == MouseButtonState::Pressed)
             {
-                m_buttonsInternal[index] = MouseButtonState::Released;
+                // 前回の update の後に押されて、まだ一度も押されたと報告していなければ、1 フレームは押されたことにする
+                m_buttonsInternal[index] = (m_downSinceUpdate[index] ? MouseButtonState::Tapped : MouseButtonState::Released);
             }
         }
     }

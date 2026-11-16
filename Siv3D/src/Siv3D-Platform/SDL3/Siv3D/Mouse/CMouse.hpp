@@ -41,6 +41,9 @@ namespace s3d
 
 		std::array<MouseButtonState, InputState::MouseButtonCount> m_buttonsInternal;
 
+		// 前回の update の後に押されたボタン (押して離すのが 1 フレーム以内に終わったら Tapped にする)
+		std::array<bool, InputState::MouseButtonCount> m_downSinceUpdate{};
+
 		std::array<InputState, InputState::MouseButtonCount> m_states;
 
 		Array<Input> m_allInputs;

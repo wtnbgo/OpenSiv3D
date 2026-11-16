@@ -196,6 +196,14 @@ namespace s3d
 		}
 	}
 
+	void CKeyboard::onKeyDown(const SDL_Scancode scancode) noexcept
+	{
+		if ((SDL_SCANCODE_UNKNOWN < scancode) && (scancode < SDL_SCANCODE_COUNT))
+		{
+			m_downSinceUpdate[scancode] = true;
+		}
+	}
+
 	void CKeyboard::update()
 	{
 		if (not m_window)
@@ -205,30 +213,38 @@ namespace s3d
 		
         int numKeys = 0;
 		const bool* keys = SDL_GetKeyboardState(&numKeys);
+
+		// 今押されているか、前回の update の後に押された (すでに離されていても 1 フレームは押されたことにする)
+		const auto isPressed = [&](const SDL_Scancode scancode)
+		{
+			return ((scancode < numKeys) && keys[scancode])
+				|| ((scancode < SDL_SCANCODE_COUNT) && m_downSinceUpdate[scancode]);
+		};
 		
 		for (auto [index, scancode] : detail::KeyConversionTable)
 		{
             if (scancode != SDL_SCANCODE_UNKNOWN && scancode < numKeys)
             {
-			    const bool pressed = keys[scancode];
-			    m_states[index].update(pressed);
+			    m_states[index].update(isPressed(scancode));
             }
 		}
 		
 		{
-			const bool shiftPressed = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+			const bool shiftPressed = isPressed(SDL_SCANCODE_LSHIFT) || isPressed(SDL_SCANCODE_RSHIFT);
 			m_states[0x10].update(shiftPressed);
 		}
 		
 		{
-			const bool controlPressed = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL];
+			const bool controlPressed = isPressed(SDL_SCANCODE_LCTRL) || isPressed(SDL_SCANCODE_RCTRL);
 			m_states[0x11].update(controlPressed);
 		}
 		
 		{
-			const bool altPressed = keys[SDL_SCANCODE_LALT] || keys[SDL_SCANCODE_RALT];
+			const bool altPressed = isPressed(SDL_SCANCODE_LALT) || isPressed(SDL_SCANCODE_RALT);
 			m_states[0x12].update(altPressed);
 		}
+
+		m_downSinceUpdate.fill(false);
 
 		{
 			m_allInputs.clear();

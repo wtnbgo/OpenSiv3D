@@ -26,6 +26,7 @@
 # include "CWindow.hpp"
 # include <Siv3D/Common/OpenGL.hpp>
 # include "../Mouse/CMouse.hpp"
+# include "../Keyboard/CKeyboard.hpp"
 # include "../TextInput/CTextInput.hpp"
 
 namespace s3d::detail
@@ -152,6 +153,10 @@ namespace s3d
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
 			{
 				static_cast<CMouse*>(SIV3D_ENGINE(Mouse))->onMouseButtonUpdated(event.button.button, (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN));
+			}
+			else if ((event.type == SDL_EVENT_KEY_DOWN) && (not event.key.repeat))
+			{
+				static_cast<CKeyboard*>(SIV3D_ENGINE(Keyboard))->onKeyDown(event.key.scancode);
 			}
 			else if (event.type == SDL_EVENT_MOUSE_WHEEL)
 			{
