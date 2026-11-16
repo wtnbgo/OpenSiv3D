@@ -23,7 +23,12 @@ namespace s3d
 	
 		String FromWstring(const std::wstring_view s)
 		{
+		# if SIV3D_PLATFORM(WINDOWS)
+			// Windows の wchar_t は UTF-16 (サロゲートペアを含む) なので、1 文字ずつのコピーではなく UTF-16 として変換する
+			return FromUTF16(std::u16string_view{ reinterpret_cast<const char16_t*>(s.data()), s.size() });
+		# else
 			return String(s.begin(), s.end());
+		# endif
 		}
 	
 		std::string Narrow(const StringView s)
@@ -33,7 +38,12 @@ namespace s3d
 
 		std::wstring ToWstring(const StringView s)
 		{
+		# if SIV3D_PLATFORM(WINDOWS)
+			const std::u16string utf16 = ToUTF16(s);
+			return std::wstring(utf16.begin(), utf16.end());
+		# else
 			return std::wstring(s.begin(), s.end());
+		# endif
 		}
 	}
 }

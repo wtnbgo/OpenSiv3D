@@ -83,7 +83,11 @@ namespace s3d
 				{
 					if (requestedPath)
 					{
-						const FilePath path = (m_screenshotDirectory + requestedPath);
+						// 絶対パス (/... や C:\... / C:/...) はそのまま使い、それ以外はスクリーンショットのフォルダからの相対パスにする
+						// (以前は常にフォルダを前に付けていたので、絶対パスを渡すと "…/Screenshot/C:\…" のような不正なパスになっていた)
+						const bool isAbsolute = requestedPath.starts_with(U'/') || requestedPath.starts_with(U'\\')
+							|| ((2 <= requestedPath.size()) && (requestedPath[1] == U':'));
+						const FilePath path = (isAbsolute ? requestedPath : (m_screenshotDirectory + requestedPath));
 						image.save(path);
 						LOG_INFO(U"📷 Screen capture saved (path: \"{0}\")"_fmt(path));
 					}

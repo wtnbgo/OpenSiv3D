@@ -59,6 +59,17 @@ namespace s3d
 		# endif
 		}
 
+		// fs::path → FilePath。Windows の path::string() は ANSI のコードページになり日本語などが化けるので、wstring から変換する
+		[[nodiscard]]
+		static FilePath FromPath(const fs::path& path)
+		{
+		# if SIV3D_PLATFORM(WINDOWS)
+			return Unicode::FromWstring(path.wstring());
+		# else
+			return Unicode::FromUTF8(path.string());
+		# endif
+		}
+
 		[[nodiscard]]
 		static fs::file_status GetStatus(const FilePathView path)
 		{
@@ -550,7 +561,7 @@ namespace s3d
 
 		namespace init
 		{
-			const static FilePath g_initialPath = NormalizePath(Unicode::Widen(fs::current_path().string()));
+			const static FilePath g_initialPath = NormalizePath(detail::FromPath(fs::current_path()));
 
 			static FilePath g_modulePath;
 
@@ -589,7 +600,7 @@ namespace s3d
 			# else
 				std::error_code ec;
 				const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
-				g_modulePath = ((not ec) && (not exe.empty())) ? Unicode::Widen(exe.string()) : Unicode::Widen(arg);
+				g_modulePath = ((not ec) && (not exe.empty())) ? detail::FromPath(exe) : Unicode::Widen(arg);
 			# endif
 			}
 
@@ -791,14 +802,11 @@ namespace s3d
 				return FilePath{};
 			}
 
-			if (path.contains(U'/'))
-			{
-				return detail::NormalizePath(Unicode::Widen(fs::weakly_canonical(detail::ToPath(path)).string()));
-			}
-			else
-			{
-				return detail::NormalizePath(Unicode::Widen(fs::weakly_canonical(detail::ToPath(U"./" + path)).string()));
-			}
+			// 相対パスはカレントディレクトリから解決する。以前は '/' を含まないパスの先頭に "./" を付けていたため、
+			// Windows の '\' 区切りの絶対パス (C:\Users\...) が "./C:\Users\..." として扱われ、"C:Users/..." に壊れていた
+			std::error_code ec;
+			const fs::path absolute = fs::absolute(detail::ToPath(path), ec);
+			return detail::NormalizePath(detail::FromPath(fs::weakly_canonical((ec ? detail::ToPath(path) : absolute), ec)));
 		}
 
 		Platform::NativeFilePath NativePath(const FilePathView path)
@@ -987,14 +995,14 @@ namespace s3d
 			{
 				for (const auto& v : fs::recursive_directory_iterator(path.narrow()))
 				{
-					paths.push_back(detail::NormalizePath(Unicode::Widen(fs::weakly_canonical(v.path()).string())));
+					paths.push_back(detail::NormalizePath(detail::FromPath(fs::weakly_canonical(v.path()))));
 				}
 			}
 			else
 			{
 				for (const auto& v : fs::directory_iterator(path.narrow()))
 				{
-					paths.push_back(detail::NormalizePath(Unicode::Widen(fs::weakly_canonical(v.path()).string())));
+					paths.push_back(detail::NormalizePath(detail::FromPath(fs::weakly_canonical(v.path()))));
 				}
 			}
 
@@ -1013,7 +1021,7 @@ namespace s3d
 
 		FilePath CurrentDirectory()
 		{
-			return detail::NormalizePath(Unicode::Widen(fs::current_path().string()));
+			return detail::NormalizePath(detail::FromPath(fs::current_path()));
 		}
 
 		bool ChangeCurrentDirectory(const FilePathView path)
@@ -1068,7 +1076,7 @@ namespace s3d
 			}
 
 			const fs::path p(path.toUTF8()), base(start.toUTF8());
-			FilePath result = Unicode::Widen(fs::proximate(p, base).string());
+			FilePath result = detail::FromPath(fs::proximate(p, base));
 
 			if (IsDirectory(result) && (not result.ends_with(U'/')))
 			{
