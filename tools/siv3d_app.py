@@ -18,6 +18,12 @@
 #   --project DIR    アプリのフォルダ (siv3d-app.json がある場所。既定: カレントディレクトリ)
 #   --target T       windows / linux / macos / ios / web / android (既定: 実行中の OS)
 #   --sdk S          ios: simulator (既定。ホストの CPU 向け) / device (arm64 の実機)
+#   --device ID      ios: run --sdk device でインストールする実機の UDID または名前
+#                    (既定: siv3d-app.local.json の ios.device、環境変数 SIV3D_IOS_DEVICE、無ければ接続中の 1 台)
+#
+# 開発者ごとの設定 (コミットしない):
+#   <project>/siv3d-app.local.json があれば siv3d-app.json に重ねて読む (例: { "ios": { "team": "ABCDE12345" } })。
+#   環境変数 SIV3D_IOS_TEAM は ios.team を、SIV3D_IOS_DEVICE は ios.device を上書きする
 #   --config C       Release / Debug / RelWithDebInfo (既定: Release)
 #   --native         linux: コンテナを使わずホストで直接ビルドする (出力は build/linux-native)
 #   --container IMG  linux: ビルドに使うコンテナイメージ (既定: siv3d-app.json の linux.container)
@@ -76,6 +82,17 @@ def host_target():
     return "linux"
 
 
+def deep_merge(base, override):
+    """辞書を再帰的に重ねる (override が優先。辞書以外の値は置き換える)"""
+    result = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def run(cmd, cwd=None, env=None):
     cmd = [str(c) for c in cmd]
     log("$ " + " ".join(cmd))
@@ -100,12 +117,24 @@ class App:
         self.target = target
         self.config = config
         self.sdk = sdk
+        self.device = ""
 
         config_path = self.project_dir / "siv3d-app.json"
         if not config_path.exists():
             fail(f"siv3d-app.json not found in {self.project_dir}")
         with open(config_path, encoding="utf-8") as f:
             self.json = json.load(f)
+
+        # 開発者ごとの設定 (Team ID など。git の管理外にする) を重ねる
+        local_path = self.project_dir / "siv3d-app.local.json"
+        if local_path.exists():
+            with open(local_path, encoding="utf-8") as f:
+                self.json = deep_merge(self.json, json.load(f))
+        ios = self.json.setdefault("ios", {})
+        if os.environ.get("SIV3D_IOS_TEAM"):
+            ios["team"] = os.environ["SIV3D_IOS_TEAM"]
+        if os.environ.get("SIV3D_IOS_DEVICE"):
+            ios["device"] = os.environ["SIV3D_IOS_DEVICE"]
 
         self.exe_name = self.json.get("exeName", self.project_dir.name)
         self.version = self.json.get("version", "1.0.0")
@@ -201,7 +230,10 @@ def configure(app, env):
                f"-DCMAKE_OSX_SYSROOT={app.ios_sysroot}",
                f"-DCMAKE_OSX_ARCHITECTURES={app.ios_arch}",
                f"-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment}",
-               f"-DSIV3D_BASE={SIV3D_BASE.as_posix()}"]
+               f"-DSIV3D_BASE={SIV3D_BASE.as_posix()}",
+               # siv3d-app.local.json / 環境変数で上書きした値を渡す (空なら siv3d-app.json の値を使う)
+               f"-DSIV3D_IOS_TEAM={app.target_json.get('team', '')}",
+               f"-DSIV3D_IOS_BUNDLE_ID_OVERRIDE={ios_bundle_id(app)}"]
         cmd += app.cmake_options()
         run(cmd, env=env)
         return
@@ -218,7 +250,15 @@ def configure(app, env):
     run(cmd, env=env)
 
 
+def require_ios_team(app):
+    """実機向けのビルドには署名用の Team ID が要る (configure の前に確認する)"""
+    if app.target == "ios" and app.sdk == "device" and not app.target_json.get("team"):
+        fail("ios.team (Apple Developer Team ID) is required for --sdk device. "
+             "Set it in siv3d-app.local.json ({ \"ios\": { \"team\": \"ABCDE12345\" } }) or SIV3D_IOS_TEAM")
+
+
 def build(app, env):
+    require_ios_team(app)
     # configure が途中で失敗・中断したビルドツリー (CMakeCache.txt はあるが build.ninja が無い) は、
     # CMakeCache.txt だけ見るとビルドに失敗し続ける。そのまま configure し直しても、vcpkg が依存の
     # インストール済みと判断して飛ばす (find_package の結果もキャッシュに残る) ので、キャッシュを消してやり直す
@@ -241,7 +281,9 @@ def build(app, env):
         # xcodebuild に SDK とアーキテクチャを渡す (署名が要る実機は自動でプロファイルを作らせる)
         cmd += ["--", "-sdk", app.ios_sysroot, "-arch", app.ios_arch]
         if app.sdk == "device":
-            cmd += ["-allowProvisioningUpdates"]
+            # 自動署名: 開発用のプロファイルを作り、接続中の実機を Team に登録させる
+            # (Xcode の Settings > Accounts に、その Team の Apple ID でサインインしておく必要がある)
+            cmd += ["-allowProvisioningUpdates", "-allowProvisioningDeviceRegistration"]
     run(cmd, env=env)
 
 
@@ -362,11 +404,46 @@ def run_ios_simulator(app):
     run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, ios_bundle_id(app)])
 
 
+def ios_connected_devices():
+    """devicectl で見える実機の一覧 [(identifier, name, 状態)]"""
+    out = Path(subprocess.run(["mktemp"], capture_output=True, text=True).stdout.strip())
+    try:
+        subprocess.run(["xcrun", "devicectl", "list", "devices", "--quiet", "--json-output", str(out)],
+                       capture_output=True, text=True)
+        data = json.loads(out.read_text()) if out.exists() and out.stat().st_size else {}
+    finally:
+        out.unlink(missing_ok=True)
+    devices = []
+    for d in data.get("result", {}).get("devices", []):
+        props = d.get("deviceProperties", {})
+        conn = d.get("connectionProperties", {})
+        devices.append((d.get("identifier", ""), props.get("name", ""),
+                        conn.get("pairingState", ""), conn.get("tunnelState", "")))
+    return devices
+
+
+def run_ios_device(app):
+    """実機にインストールして起動する (Xcode 15 以降の devicectl)"""
+    bundle = app.executable()
+    if not bundle.exists():
+        fail(f"not staged yet: {bundle}")
+    device = app.device or app.target_json.get("device", "")
+    if not device:
+        candidates = [d for d in ios_connected_devices() if d[2] == "paired" and d[3] != "unavailable"]
+        if not candidates:
+            fail("no paired iOS device found (connect the device, trust this Mac, and enable Developer Mode)")
+        device = candidates[0][0]
+        log(f"device: {candidates[0][1]} ({device})")
+    run(["xcrun", "devicectl", "device", "install", "app", "--device", device, bundle])
+    run(["xcrun", "devicectl", "device", "process", "launch", "--terminate-existing", "--device", device, ios_bundle_id(app)])
+
+
 def run_app(app):
     if app.target == "ios":
-        if app.sdk != "simulator":
-            fail("run supports only --sdk simulator (install to a device with Xcode or devicectl)")
-        run_ios_simulator(app)
+        if app.sdk == "device":
+            run_ios_device(app)
+        else:
+            run_ios_simulator(app)
         return
     exe = app.executable()
     if not exe.exists():
@@ -397,6 +474,11 @@ def info(app):
     print(f"build      : {app.cmake_dir}")
     print(f"dist       : {app.dist_dir}")
     print(f"package    : {app.package_dir} {app.packages()}")
+    if app.target == "ios":
+        team = app.target_json.get("team", "")
+        print(f"ios team   : {(team[:3] + '*' * (len(team) - 3)) if team else '(not set)'}")
+        print(f"ios bundle : {ios_bundle_id(app)}")
+        print(f"ios device : {app.device or app.target_json.get('device', '') or '(auto)'}")
 
 
 # -----------------------------------------------------------------------------
@@ -541,6 +623,7 @@ def main():
     parser.add_argument("--target", choices=TARGETS, default=host_target())
     parser.add_argument("--config", default="Release")
     parser.add_argument("--sdk", choices=["simulator", "device"], default="simulator")
+    parser.add_argument("--device", default="")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--in-container", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--container")
@@ -550,6 +633,7 @@ def main():
 
     build_name = "linux-native" if (args.target == "linux" and args.native and not args.in_container) else None
     app = App(args.project, args.target, args.config, args.sdk, build_name)
+    app.device = args.device
 
     commands = []
     for c in args.commands:
