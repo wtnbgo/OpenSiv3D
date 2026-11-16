@@ -12,6 +12,7 @@
 # pragma once
 # include <atomic>
 # include <mutex>
+# include <fstream>
 # include <Siv3D/Logger/ILogger.hpp>
 
 namespace s3d
@@ -23,6 +24,9 @@ namespace s3d
 		std::mutex m_mutex;
 
 		std::atomic<bool> m_enabled{ true };
+
+		// 環境変数 SIV3D_LOG_FILE で指定したログファイル (指定が無ければ開かない)
+		std::ofstream m_file;
 
 	public:
 

@@ -318,6 +318,7 @@ set(SIV3D_SDL3_SOURCES
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Unicode/SivUnicode_SDL3.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/WebcamInfo/SivWebcamInfo.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Window/CWindow.cpp
+  Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Repl/SivRepl_SDL3.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Window/WindowFactory.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/XInput/XInputFactory.cpp
 )

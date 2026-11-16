@@ -31,6 +31,9 @@
 
 namespace s3d::detail
 {
+	// 簡易 REPL (SIV3D_REPL_FILE。Repl/SivRepl_SDL3.cpp)
+	void PollRepl(SDL_Window* window);
+
 	// アプリの既定のウィンドウタイトル (UTF-8)。siv3d_add_app がアプリ側に生成するソースが、
 	// main の前 (静的初期化) に siv3d_set_app_default_title() で siv3d-app.json の "name" を設定する
 	static const char* g_appDefaultTitleUTF8 = nullptr;
@@ -147,6 +150,9 @@ namespace s3d
 
 	void CWindow::update()
 	{
+		// 簡易 REPL の命令を実行する (押したイベントは、続くイベントの処理でこのフレームに反映される)
+		detail::PollRepl(m_window);
+
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
