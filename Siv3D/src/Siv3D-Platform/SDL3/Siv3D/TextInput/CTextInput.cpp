@@ -14,6 +14,7 @@
 # include <Siv3D/FormatLiteral.hpp>
 # include <Siv3D/2DShapes.hpp>
 # include <Siv3D/Keyboard.hpp>
+# include <Siv3D/Mouse.hpp>
 # include <Siv3D/Unicode.hpp>
 # include <Siv3D/Window/IWindow.hpp>
 # include <Siv3D/Renderer/IRenderer.hpp>
@@ -50,6 +51,7 @@ namespace s3d
 			if (SDL_StartTextInput(m_window))
 			{
 				m_textInputStarted = true;
+				m_keyboardShown = false;
 			}
 			else
 			{
@@ -82,13 +84,27 @@ namespace s3d
 	{
 		if constexpr (TextInputOnDemand)
 		{
-			// 続けて読まれた (テキストボックスなどが入力中) ならキーボードを出し、数フレーム読まれなければしまう。
-			// 1 フレームだけ読まれた場合 (TextBox はクリックのたびに GetEditingText を呼ぶ) には出さない
-			if (std::exchange(m_inputRequested, false))
+			// ユーザがキーボードを閉じた (閉じるボタン・戻るキー) なら、こちらも入力をやめる。
+			// 入力欄が入力中のままでも、もう一度タップされるまではキーボードを出さない (setEditingArea)
+			if (m_textInputStarted)
+			{
+				const bool shown = SDL_ScreenKeyboardShown(m_window);
+				m_keyboardShown |= shown;
+
+				if ((not SDL_TextInputActive(m_window)) || (m_keyboardShown && (not shown)))
+				{
+					setTextInputActive(false);
+					m_keyboardDismissed = true;
+				}
+			}
+
+			// 入力欄 (TextBox など) が続けて入力の場所を伝えてきた (= 入力中) ならキーボードを出し、
+			// 数フレーム伝えてこなければしまう
+			if (std::exchange(m_areaRequested, false))
 			{
 				m_idleFrames = 0;
 
-				if (2 <= ++m_requestedFrames)
+				if ((not m_keyboardDismissed) && (2 <= ++m_requestedFrames))
 				{
 					setTextInputActive(m_imeEnabled);
 				}
@@ -96,6 +112,7 @@ namespace s3d
 			else
 			{
 				m_requestedFrames = 0;
+				m_keyboardDismissed = false;
 
 				if (m_textInputStarted && (3 < ++m_idleFrames))
 				{
@@ -128,6 +145,15 @@ namespace s3d
 		if (not m_window)
 		{
 			return;
+		}
+
+		// Android / iOS: 入力欄が入力中であることの合図 (キーボードを出す)。
+		// ユーザがキーボードを閉じた後は、もう一度タップされたら出し直す
+		m_areaRequested = true;
+
+		if (m_keyboardDismissed && MouseL.down())
+		{
+			m_keyboardDismissed = false;
 		}
 
 		// シーンの座標 → ウィンドウの座標 (SDL のポイント)。拡大表示の余白とピクセル密度を考慮する
@@ -201,13 +227,11 @@ namespace s3d
 
 	const String& CTextInput::getChars() const
 	{
-		m_inputRequested = true;
 		return m_chars;
 	}
 
 	const String& CTextInput::getEditingText() const
 	{
-		m_inputRequested = true;
 		return m_preeditText;
 	}
 

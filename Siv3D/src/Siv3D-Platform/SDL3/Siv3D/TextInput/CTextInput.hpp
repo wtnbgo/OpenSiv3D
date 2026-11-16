@@ -83,10 +83,16 @@ namespace s3d
 		// SDL のテキスト入力を開始しているか (SDL_StartTextInput はウィンドウの指定が必須)
 		bool m_textInputStarted = false;
 
-		// 前回の update の後に、テキスト入力の結果 (getChars / getEditingText) が読まれたか。
-		// Android / iOS では、テキストボックスなどが入力を受け付けている間 (毎フレーム読まれる) だけ
+		// 前回の update の後に、入力の場所 (setEditingArea) が伝えられたか。
+		// Android / iOS では、テキストボックスなどが入力中 (毎フレーム伝えてくる) の間だけ
 		// テキスト入力 (ソフトウェアキーボード) を有効にする
-		mutable bool m_inputRequested = false;
+		bool m_areaRequested = false;
+
+		// テキスト入力を始めてから、キーボードが表示されたか (表示されてから消えたら、ユーザが閉じた)
+		bool m_keyboardShown = false;
+
+		// ユーザがキーボードを閉じた。入力欄がもう一度タップされるか、入力をやめるまでは出さない
+		bool m_keyboardDismissed = false;
 
 		int32 m_idleFrames = 0;
 
