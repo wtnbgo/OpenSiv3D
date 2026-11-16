@@ -347,10 +347,17 @@ END
   # Resource() は ModulePath の親ディレクトリ + "resources/" を参照する。
   # macOS の .app では $<TARGET_FILE_DIR> は Contents/MacOS になる (起動時のカレントディレクトリもここ)。
   # ---------------------------------------------------------------------------
+  # iOS の .app は平らな構成で、直下の "Resources" (大文字小文字を区別しない) は旧形式のバンドルと解釈されて
+  # インストールできなくなるので、エンジンのリソースは siv3d_resources/ に置く (SivResource_SDL3.cpp と同じ)
+  if(IOS)
+    set(_resource_dir_name "siv3d_resources")
+  else()
+    set(_resource_dir_name "resources")
+  endif()
   set(_engine_resource_src "${SIV3D_SOURCE_DIR}/Web/App/resources/engine")
   foreach(_dir font soundfont texture shader/essl)
     add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_directory "${_engine_resource_src}/${_dir}" "${_exe_dir}/resources/engine/${_dir}"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory "${_engine_resource_src}/${_dir}" "${_exe_dir}/${_resource_dir_name}/engine/${_dir}"
     )
   endforeach()
 

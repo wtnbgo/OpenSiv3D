@@ -43,7 +43,13 @@ namespace s3d
 			return (detail::init::g_customResourceDirectory + path);
 		}
 
+	# if SIV3D_PLATFORM(IOS)
+		// iOS の .app は平らな構成で、直下の "Resources" (大文字小文字を区別しない) は旧形式のバンドルと
+		// 解釈されてインストールできなくなるため、別の名前にする
+		const FilePath resourceDirectory = (FileSystem::ParentPath(FileSystem::ModulePath()) + U"siv3d_resources/");
+	# else
 		const FilePath resourceDirectory = (FileSystem::ParentPath(FileSystem::ModulePath()) + U"resources/");
+	# endif
 
 		return (resourceDirectory + path);
 	}

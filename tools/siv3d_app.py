@@ -224,6 +224,10 @@ def build(app, env):
             cache.unlink()
             shutil.rmtree(app.cmake_dir / "CMakeFiles", ignore_errors=True)
         configure(app, env)
+    elif app.target == "ios":
+        # Xcode ジェネレータは、CMakeLists.txt などが変わると xcodebuild の中 (ZERO_CHECK) で CMake を再実行する。
+        # その環境では vcpkg のホスト用ツールが iOS 向けにビルドされてしまうことがあるので、先にここで configure しておく
+        configure(app, env)
     cmd = ["cmake", "--build", app.cmake_dir, "--config", app.config]
     if app.target == "ios":
         # xcodebuild に SDK とアーキテクチャを渡す (署名が要る実機は自動でプロファイルを作らせる)

@@ -43,7 +43,7 @@ namespace s3d
 	{
 		if (clearTargets & GLES3ClearTarget::BackBuffer)
 		{
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 			::glClearColor(
 				static_cast<float>(m_letterboxColor.r),
 				static_cast<float>(m_letterboxColor.g),
@@ -70,7 +70,7 @@ namespace s3d
 
 	void GLES3BackBuffer::unbind()
 	{
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3BackBuffer::updateFromSceneBuffer()
@@ -85,8 +85,8 @@ namespace s3d
 			::glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneBuffers.scene->getFrameBuffer());
 			::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneBuffers.resolved->getFrameBuffer());
 			::glBlitFramebuffer(0, 0, m_sceneSize.x, m_sceneSize.y, 0, 0, m_sceneSize.x, m_sceneSize.y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-			::glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_READ_FRAMEBUFFER, GetDefaultFramebuffer());
+			::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, GetDefaultFramebuffer());
 
 			::glActiveTexture(GL_TEXTURE0);
 			::glBindTexture(GL_TEXTURE_2D, m_sceneBuffers.resolved->getTexture());
@@ -110,7 +110,7 @@ namespace s3d
 			{
 				::glReadPixels(0, 0, m_sceneSize.x, m_sceneSize.y, GL_RGBA, GL_UNSIGNED_BYTE, m_screenCaptureImage.data());
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 		else
 		{
@@ -118,7 +118,7 @@ namespace s3d
 			{
 				::glReadPixels(0, 0, m_sceneSize.x, m_sceneSize.y, GL_RGBA, GL_UNSIGNED_BYTE, m_screenCaptureImage.data());
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 	}
 

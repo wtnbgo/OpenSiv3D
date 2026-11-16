@@ -115,7 +115,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -160,7 +160,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -205,7 +205,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -250,7 +250,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -295,7 +295,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -339,7 +339,7 @@ namespace s3d
 				LOG_FAIL(U"TextureFormat `{}` is not supported in MSRenderTexture"_fmt(format.name()));
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		// [メインテクスチャ] を作成
@@ -360,7 +360,7 @@ namespace s3d
 			{
 				return;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		if (hasDepth)
@@ -596,7 +596,7 @@ namespace s3d
 			::glClear(GL_COLOR_BUFFER_BIT);
 		}
 
-		//::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		//::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3Texture::readRT(Image& image)
@@ -620,7 +620,7 @@ namespace s3d
 		{
 			::glReadPixels(0, 0, m_size.x, m_size.y, m_format.GLFormat(), m_format.GLType(), image.data());
 		}
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3Texture::readRT(Grid<float>& image)
@@ -643,7 +643,7 @@ namespace s3d
 		{
 			::glReadPixels(0, 0, m_size.x, m_size.y, m_format.GLFormat(), m_format.GLType(), image.data());
 		}
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3Texture::readRT(Grid<Float2>& image)
@@ -666,7 +666,7 @@ namespace s3d
 		{
 			::glReadPixels(0, 0, m_size.x, m_size.y, m_format.GLFormat(), m_format.GLType(), image.data());
 		}
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3Texture::readRT(Grid<Float4>& image)
@@ -689,7 +689,7 @@ namespace s3d
 		{
 			::glReadPixels(0, 0, m_size.x, m_size.y, m_format.GLFormat(), m_format.GLType(), image.data());
 		}
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	void GLES3Texture::resolveMSRT()
@@ -703,8 +703,8 @@ namespace s3d
 		::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolvedFrameBuffer);
 		::glBlitFramebuffer(0, 0, m_size.x, m_size.y, 0, 0, m_size.x, m_size.y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
-		::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		::glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_DRAW_FRAMEBUFFER, GetDefaultFramebuffer());
+		::glBindFramebuffer(GL_READ_FRAMEBUFFER, GetDefaultFramebuffer());
 	}
 
 	bool GLES3Texture::initDepthBuffer()
@@ -744,7 +744,7 @@ namespace s3d
 				return false;
 			}
 		}
-		::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 
 		m_hasDepth = true;
 

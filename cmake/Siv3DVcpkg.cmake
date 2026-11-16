@@ -43,6 +43,17 @@ if(SIV3D_WITH_FFMPEG AND NOT ("ffmpeg" IN_LIST VCPKG_MANIFEST_FEATURES))
   list(APPEND VCPKG_MANIFEST_FEATURES "ffmpeg")
 endif()
 
+# Xcode のビルド中 (ZERO_CHECK による CMake の再実行) に vcpkg が走る場合、xcodebuild が設定した
+# SDKROOT や IPHONEOS_DEPLOYMENT_TARGET などの環境変数を clang が拾い、ホスト用のツール (x64-osx / arm64-osx の
+# flatc など) が iOS シミュレータ向けにビルドされて実行できなくなる (バイナリキャッシュにも残る)。
+# vcpkg は CMake の子プロセスなので、ここで (project() より前に) 取り除く
+if(CMAKE_HOST_APPLE AND DEFINED ENV{XCODE_VERSION_ACTUAL})
+  foreach(_siv3d_xcode_env SDKROOT MACOSX_DEPLOYMENT_TARGET IPHONEOS_DEPLOYMENT_TARGET TVOS_DEPLOYMENT_TARGET
+                           WATCHOS_DEPLOYMENT_TARGET XROS_DEPLOYMENT_TARGET DRIVERKIT_DEPLOYMENT_TARGET)
+    unset(ENV{${_siv3d_xcode_env}})
+  endforeach()
+endif()
+
 # 依存の一覧は OpenSiv3D の vcpkg.json を使う (アプリ側に複製しない)
 if(NOT DEFINED VCPKG_MANIFEST_DIR)
   set(VCPKG_MANIFEST_DIR "${SIV3D_SOURCE_DIR}" CACHE PATH "vcpkg manifest directory (OpenSiv3D's vcpkg.json)")

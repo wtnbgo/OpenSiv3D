@@ -120,7 +120,7 @@ namespace s3d
 			{
 				return nullptr;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 		else
 		{
@@ -136,7 +136,7 @@ namespace s3d
 			{
 				return nullptr;
 			}
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 		}
 
 		p->m_frameBuffer	= frameBuffer;

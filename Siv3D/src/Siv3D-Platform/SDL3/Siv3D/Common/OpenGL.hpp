@@ -16,4 +16,9 @@
 namespace s3d
 {
 	void CheckOpenGLError();
+
+	/// @brief 画面 (ウィンドウ) に描画するときのフレームバッファを返します。
+	/// @remark 通常は 0 (既定のフレームバッファ)。iOS では SDL の UIKit バックエンドが作ったフレームバッファ
+	[[nodiscard]]
+	GLuint GetDefaultFramebuffer();
 }
