@@ -9,7 +9,9 @@
 //
 //-----------------------------------------------
 
+# include <optional>
 # include <Siv3D/Common.hpp>
+# include <Siv3D/Utility.hpp>
 # include <Siv3D/Image.hpp>
 # include <Siv3D/WindowState.hpp>
 # include <Siv3D/Window/IWindow.hpp>
@@ -17,6 +19,27 @@
 # include <Siv3D/Renderer/IRenderer.hpp>
 # include <Siv3D/EngineLog.hpp>
 # include "CCursor.hpp"
+
+namespace s3d::detail
+{
+	// 簡易 REPL (move / click) が指定したカーソルの位置 (ウィンドウの座標)。実際のマウスが動くまで SDL のマウスの状態の代わりに使う。
+	// Wayland などでは、ポインタがウィンドウ上に無いと SDL_WarpMouseInWindow が黙って無視されるため
+	static std::optional<Vec2> g_replCursorPos;
+
+	void SetReplCursorPos(const Vec2& windowPos)
+	{
+		g_replCursorPos = windowPos;
+	}
+
+	// SDL_EVENT_MOUSE_MOTION ごとに CWindow から呼ぶ。REPL の位置と違う所への動き (実際のマウス操作) で上書きをやめる
+	void OnMouseMotion(const float x, const float y)
+	{
+		if (g_replCursorPos && ((0.5 < Abs(x - g_replCursorPos->x)) || (0.5 < Abs(y - g_replCursorPos->y))))
+		{
+			g_replCursorPos.reset();
+		}
+	}
+}
 
 namespace s3d
 {
@@ -37,6 +60,12 @@ namespace s3d
 			// (HiDPI でなければ pixelDensity は 1.0)
 			float clientX, clientY;
 			SDL_GetMouseState(&clientX, &clientY);
+
+			if (g_replCursorPos)
+			{
+				clientX = static_cast<float>(g_replCursorPos->x);
+				clientY = static_cast<float>(g_replCursorPos->y);
+			}
 			float pixelDensity = SDL_GetWindowPixelDensity(window);
 			if (pixelDensity <= 0.0f) pixelDensity = 1.0f;
 			return{ (clientX * pixelDensity), (clientY * pixelDensity) };

@@ -34,6 +34,9 @@ namespace s3d::detail
 	// 簡易 REPL (SIV3D_REPL_FILE。Repl/SivRepl_SDL3.cpp)
 	void PollRepl(SDL_Window* window);
 
+	// 実際のマウスの動きで、REPL が指定したカーソルの位置の上書きをやめる (Cursor/CCursor.cpp)
+	void OnMouseMotion(float x, float y);
+
 	// アプリの既定のウィンドウタイトル (UTF-8)。siv3d_add_app がアプリ側に生成するソースが、
 	// main の前 (静的初期化) に siv3d_set_app_default_title() で siv3d-app.json の "name" を設定する
 	static const char* g_appDefaultTitleUTF8 = nullptr;
@@ -159,6 +162,10 @@ namespace s3d
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
 			{
 				static_cast<CMouse*>(SIV3D_ENGINE(Mouse))->onMouseButtonUpdated(event.button.button, (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN));
+			}
+			else if (event.type == SDL_EVENT_MOUSE_MOTION)
+			{
+				detail::OnMouseMotion(event.motion.x, event.motion.y);
 			}
 			else if ((event.type == SDL_EVENT_KEY_DOWN) && (not event.key.repeat))
 			{

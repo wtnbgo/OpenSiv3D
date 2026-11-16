@@ -50,6 +50,9 @@
 
 namespace s3d::detail
 {
+	// Cursor/CCursor.cpp: REPL が指定したカーソルの位置 (実際のマウスが動くまで使う)
+	void SetReplCursorPos(const Vec2& windowPos);
+
 	namespace
 	{
 		[[nodiscard]]
@@ -141,6 +144,8 @@ namespace s3d::detail
 				iss >> buttonName;
 				const Vec2 windowPos = SceneToWindow(window, Vec2{ x, y });
 				SDL_WarpMouseInWindow(window, static_cast<float>(windowPos.x), static_cast<float>(windowPos.y));
+				// Wayland などでは warp が無視されることがあるので、カーソルの位置としても指定する
+				SetReplCursorPos(windowPos);
 
 				if (command == "click")
 				{
