@@ -158,17 +158,17 @@ namespace s3d
 		switch (scancode)
 		{
 		case SDL_SCANCODE_BACKSPACE:
-			ch = U'';
+			ch = U'\b';
 			break;
 		case SDL_SCANCODE_DELETE:
 			ch = char32(0x7F);
 			break;
 		case SDL_SCANCODE_RETURN:
 		case SDL_SCANCODE_KP_ENTER:
-			ch = U'';
+			ch = U'\r';
 			break;
 		case SDL_SCANCODE_TAB:
-			ch = U'	';
+			ch = U'\t';
 			break;
 		default:
 			return;
