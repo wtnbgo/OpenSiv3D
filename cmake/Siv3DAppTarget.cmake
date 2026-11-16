@@ -114,6 +114,32 @@ function(siv3d_add_app target)
   set(_exe_dir "$<TARGET_FILE_DIR:${target}>")
 
   # ---------------------------------------------------------------------------
+  # 既定のウィンドウタイトル: siv3d-app.json の "windowTitle" (省略時は "name")。
+  # main の前 (静的初期化) にエンジンへ渡すソースを生成する (Window::SetTitle を呼べばそちらが優先)。
+  # 文字列はバイトごとの 16 進エスケープにする (引用符・バックスラッシュ・日本語をそのまま扱うため)
+  # ---------------------------------------------------------------------------
+  _siv3d_json_get(_window_title "${_json}" "${_name}" windowTitle)
+  string(HEX "${_window_title}" _title_hex)
+  string(LENGTH "${_title_hex}" _title_hex_length)
+  set(_title_literal "\"\"")
+  if(_title_hex_length GREATER 0)
+    math(EXPR _title_last "${_title_hex_length} - 2")
+    foreach(_i RANGE 0 ${_title_last} 2)
+      string(SUBSTRING "${_title_hex}" ${_i} 2 _byte)
+      string(APPEND _title_literal " \"\\x${_byte}\"")
+    endforeach()
+  endif()
+  set(_appinfo_cpp "${CMAKE_CURRENT_BINARY_DIR}/${target}_siv3d_appinfo.cpp")
+  # (set に複数の文字列を渡すとリストになってセミコロンが消えるので、1 つの文字列に APPEND する)
+  set(_appinfo_content "// siv3d_add_app が生成 (siv3d-app.json の windowTitle / name)\n")
+  string(APPEND _appinfo_content "extern \"C\" void siv3d_set_app_default_title(const char* titleUTF8);\n")
+  string(APPEND _appinfo_content "namespace\n{\n")
+  string(APPEND _appinfo_content "\tconst int s_siv3dAppInfo = (siv3d_set_app_default_title(${_title_literal}), 0);\n")
+  string(APPEND _appinfo_content "}\n")
+  file(CONFIGURE OUTPUT "${_appinfo_cpp}" CONTENT "${_appinfo_content}")
+  target_sources(${target} PRIVATE "${_appinfo_cpp}")
+
+  # ---------------------------------------------------------------------------
   # Android: libmain.so を作るだけ。APK への格納・アセット・署名は外枠 (siv3d_and の Gradle) が行う
   #   エンジンのリソースとアセットは APK の assets に入れ、初回起動時に内部ストレージへ展開して
   #   そのフォルダを Siv3D のアプリディレクトリ (起動引数) として渡す

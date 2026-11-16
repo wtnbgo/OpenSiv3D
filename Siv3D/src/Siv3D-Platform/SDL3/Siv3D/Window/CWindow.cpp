@@ -28,9 +28,28 @@
 # include "../Mouse/CMouse.hpp"
 # include "../TextInput/CTextInput.hpp"
 
+namespace s3d::detail
+{
+	// アプリの既定のウィンドウタイトル (UTF-8)。siv3d_add_app がアプリ側に生成するソースが、
+	// main の前 (静的初期化) に siv3d_set_app_default_title() で siv3d-app.json の "name" を設定する
+	static const char* g_appDefaultTitleUTF8 = nullptr;
+}
+
+extern "C" void siv3d_set_app_default_title(const char* titleUTF8)
+{
+	s3d::detail::g_appDefaultTitleUTF8 = titleUTF8;
+}
+
 namespace s3d
 {
-	CWindow::CWindow() = default;
+	CWindow::CWindow()
+	{
+		if (detail::g_appDefaultTitleUTF8 && *detail::g_appDefaultTitleUTF8)
+		{
+			m_title = Unicode::FromUTF8(detail::g_appDefaultTitleUTF8);
+			m_actualTitle = (SIV3D_BUILD(DEBUG) ? (m_title + U" (Debug Build)") : m_title);
+		}
+	}
 
 	CWindow::~CWindow()
 	{
