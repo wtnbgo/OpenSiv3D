@@ -11,6 +11,8 @@
 
 # include "OpenGL.hpp"
 # include <Siv3D/EngineLog.hpp>
+# include <Siv3D/Window/IWindow.hpp>
+# include <Siv3D/Common/Siv3DEngine.hpp>
 
 namespace s3d
 {
@@ -36,5 +38,19 @@ namespace s3d
 				break;
 			}
 		}
+	}
+
+	GLuint GetDefaultFramebuffer()
+	{
+	# if SIV3D_PLATFORM(IOS)
+		// iOS の EAGL には既定のフレームバッファ (0) が無く、SDL がビューのフレームバッファを作る
+		if (SDL_Window* window = static_cast<SDL_Window*>(SIV3D_ENGINE(Window)->getHandle()))
+		{
+			return static_cast<GLuint>(SDL_GetNumberProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER, 0));
+		}
+		return 0;
+	# else
+		return 0;
+	# endif
 	}
 }

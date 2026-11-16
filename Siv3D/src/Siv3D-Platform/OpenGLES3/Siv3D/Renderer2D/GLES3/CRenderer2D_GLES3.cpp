@@ -1461,7 +1461,7 @@ namespace s3d
 	{
 		// view port
 		{
-			::glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			::glBindFramebuffer(GL_FRAMEBUFFER, GetDefaultFramebuffer());
 			auto [s, viewRect] = pRenderer->getLetterboxComposition();
 			::glViewport(
 				static_cast<int32>(viewRect.x),
