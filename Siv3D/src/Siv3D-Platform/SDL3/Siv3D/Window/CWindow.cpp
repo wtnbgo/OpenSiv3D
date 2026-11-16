@@ -174,6 +174,14 @@ namespace s3d
 			{
 				SIV3D_ENGINE(UserAction)->reportUserActions(UserAction::CloseButtonClicked);
 			}
+		# if defined(__ANDROID__)
+			else if ((event.type == SDL_EVENT_KEY_DOWN) && (event.key.key == SDLK_AC_BACK) && (not event.key.repeat))
+			{
+				// Android の戻るボタン: ウィンドウの閉じるボタンと同じ扱いにする (既定では System::Update() が false を返して終了。
+				// 終了させたくない場合は System::SetTerminationTriggers から UserAction::CloseButtonClicked を外す)
+				SIV3D_ENGINE(UserAction)->reportUserActions(UserAction::CloseButtonClicked);
+			}
+		# endif
 		}
 		
 		updateState();
