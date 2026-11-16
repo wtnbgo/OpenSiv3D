@@ -14,7 +14,7 @@
 # include <Siv3D/Error.hpp>
 
 # define CURL_STATICLIB
-# if SIV3D_PLATFORM(WINDOWS)
+# if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3) // SDL3 版は vcpkg の curl
 #	include <ThirdParty-prebuilt/curl/curl.h>
 # elif SIV3D_PLATFORM(WEB)
 #   // 何もインクルードしない

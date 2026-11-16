@@ -64,7 +64,9 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
 
 ## 既知の制限
 
-- **スクリプト (AngelScript)**: 無効です (wasm からネイティブ関数を呼べないため。以前の Web 版と同じ)。
+- **スクリプト (AngelScript)**: 無効です (いまは AS_MAX_PORTABILITY でビルドし、CScript はスタブ)。有効にするには、バインドした関数の
+  呼び出し (ネイティブの呼び出し規約) を wasm で行う仕組みが要ります (以前の Web 版の `as_callfunc_wasm32.cpp` と JS の呼び出し、または全バインドの
+  asCALL_GENERIC 化)。
 - **動画**: movie-player (libvpx) は vcpkg の libvpx が wasm に対応していないため無効です。OpenCV の動画も読めません。
 - **ダイアログ**: SDL3 のファイルダイアログは Web では使えず、結果なしが返ります。
 - **ファイルの変更監視・ゴミ箱**: 無効です。

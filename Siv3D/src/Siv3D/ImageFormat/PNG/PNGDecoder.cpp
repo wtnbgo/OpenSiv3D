@@ -14,7 +14,9 @@
 # include <Siv3D/ScopeGuard.hpp>
 # include <Siv3D/Endian.hpp>
 
-# if SIV3D_PLATFORM(WINDOWS) | SIV3D_PLATFORM(MACOS) | SIV3D_PLATFORM(WEB)
+// SDL3 版はどの機種も vcpkg のライブラリとリンクするので、ヘッダも vcpkg のものを使う
+// (同梱の ThirdParty-prebuilt のヘッダは版や型の大きさが違う。例: Web (wasm32) の libtiff の tmsize_t)
+# if (SIV3D_PLATFORM(WINDOWS) | SIV3D_PLATFORM(MACOS) | SIV3D_PLATFORM(WEB)) && !defined(SIV3D_USE_SDL3)
 #	include <ThirdParty-prebuilt/libpng/png.h>
 # else
 #	include <png.h>

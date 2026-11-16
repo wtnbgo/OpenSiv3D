@@ -24,7 +24,7 @@
 #	include <Siv3D/Network/WebFetch.hpp> // Web は curl の代わりに Emscripten の fetch API
 # else
 #	define CURL_STATICLIB
-#	if SIV3D_PLATFORM(WINDOWS)
+#	if SIV3D_PLATFORM(WINDOWS) && !defined(SIV3D_USE_SDL3) // SDL3 版は vcpkg の curl
 #		include <ThirdParty-prebuilt/curl/curl.h>
 #	else
 #		include <curl/curl.h>
