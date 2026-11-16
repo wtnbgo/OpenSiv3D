@@ -31,8 +31,10 @@
 
 namespace s3d::detail
 {
-	// 簡易 REPL (SIV3D_REPL_FILE。Repl/SivRepl_SDL3.cpp)
+# if defined(SIV3D_WITH_REPL)
+	// 簡易 REPL (SIV3D_REPL_FILE。Repl/SivRepl_SDL3.cpp。CMake の SIV3D_WITH_REPL=OFF で外れる)
 	void PollRepl(SDL_Window* window);
+# endif
 
 	// 実際のマウスの動きで、REPL が指定したカーソルの位置の上書きをやめる (Cursor/CCursor.cpp)
 	void OnMouseMotion(float x, float y);
@@ -153,8 +155,10 @@ namespace s3d
 
 	void CWindow::update()
 	{
+	# if defined(SIV3D_WITH_REPL)
 		// 簡易 REPL の命令を実行する (押したイベントは、続くイベントの処理でこのフレームに反映される)
 		detail::PollRepl(m_window);
+	# endif
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event))

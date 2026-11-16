@@ -51,7 +51,25 @@ printf 'info\ncapture /tmp/shot.png\n' > /tmp/repl.tmp && mv /tmp/repl.tmp /tmp/
   Set-Content repl.tmp "click 400 300`ncapture $PWD\shot.png" -Encoding UTF8; Move-Item -Force repl.tmp repl.txt
   ```
 
+## マスターリリースでは REPL を外す: `SIV3D_WITH_REPL`
+
+REPL は外から命令を送り込める仕組みなので、**マスターリリースのビルドでは CMake のオプション `SIV3D_WITH_REPL=OFF` で
+コードごと外してください** (既定は ON。OFF にすると `SIV3D_REPL_FILE` を設定しても何も起きない)。ログファイル
+(`SIV3D_LOG_FILE`) は操作を受け付けないので、オプションに関係なく使えます。
+
+テンプレート siv3d_app では、マスターリリースをビルドする環境の `siv3d-app.local.json` (または `siv3d-app.json`) に書きます:
+
+```json
+{ "cmake": { "options": { "SIV3D_WITH_REPL": "OFF" } } }
+```
+
+- CMake のオプションはビルドツリーのキャッシュに残るので、OFF でビルドした後に開発用に戻すときは、`"ON"` と明示して
+  configure し直すか、ビルドツリー (`build/<機種>/cmake`) を消してください (指定を消すだけでは OFF のまま)。
+- 切り替えるとエンジン全体がビルドし直しになります。マスターリリース用には、開発用とは別のフォルダ
+  (テンプレートを別の場所に取り出したものなど) でビルドすると、行き来の手間がかかりません。
+
 ## 確認
 
 Windows (NVIDIA、OpenGL ES 3.2) で、`info` / `move` / `click` (左右) / `key` / `capture` / `log` / `quit` が動くこと、
 `key Escape` で既定の終了処理が動くこと、1 フレーム以内のクリック・キー入力が `down()` で 1 回ずつ数えられることを確認しました。
+`SIV3D_WITH_REPL=OFF` では REPL のソースがビルドに含まれず、エンジンのライブラリにも REPL のコードが入らないことを確認しました。

@@ -263,6 +263,10 @@ if(APPLE)
   )
 endif()
 
+# 簡易 REPL (SIV3D_REPL_FILE。開発・自動テスト用、SDL3/DEBUG.md)。外から命令を送り込める仕組みなので、
+# マスターリリースでは OFF にしてコードごと外す (アプリでは siv3d-app.json の cmake.options に "SIV3D_WITH_REPL": "OFF")
+option(SIV3D_WITH_REPL "Build the simple REPL for development and automated tests (SIV3D_REPL_FILE). Turn OFF for master releases" ON)
+
 set(SIV3D_SDL3_SOURCES
   ${SIV3D_SDL3_AUDIO_DECODERS}
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Audio/NullSoundTouchFunctions.cpp
@@ -318,7 +322,6 @@ set(SIV3D_SDL3_SOURCES
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Unicode/SivUnicode_SDL3.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/WebcamInfo/SivWebcamInfo.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Window/CWindow.cpp
-  Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Repl/SivRepl_SDL3.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Window/WindowFactory.cpp
   Siv3D/src/Siv3D-Platform/SDL3/Siv3D/XInput/XInputFactory.cpp
 )
@@ -1130,6 +1133,10 @@ endif()
 target_compile_definitions(Siv3D INTERFACE SIV3D_USE_SDL3)
 if(EMSCRIPTEN)
   target_compile_definitions(Siv3D INTERFACE _XM_NO_INTRINSICS_)
+endif()
+if(SIV3D_WITH_REPL)
+  target_sources(Siv3D PRIVATE Siv3D/src/Siv3D-Platform/SDL3/Siv3D/Repl/SivRepl_SDL3.cpp)
+  target_compile_definitions(Siv3D PRIVATE SIV3D_WITH_REPL)
 endif()
 if(SIV3D_WITH_MOVIEPLAYER)
   target_sources(Siv3D PRIVATE
