@@ -109,6 +109,7 @@ class App:
         # linux: ホストで直接ビルドする場合 (--native) はコンテナのビルドツリー (パスが /app/... ) と
         # 混ざらないよう build/linux-native を使う
         self.build_dir = self.project_dir / "build" / (build_name or target)
+        self.native_host_build = (build_name == "linux-native")
         if target == "ios":
             # simulator はホストの CPU (Intel Mac は x86_64、Apple Silicon は arm64)、device は arm64
             self.ios_arch = "arm64" if sdk == "device" else ("x86_64" if platform.machine() == "x86_64" else "arm64")
@@ -275,6 +276,10 @@ def package(app):
     base = f"{app.exe_name}-{app.version}-{app.target}"
     if app.target == "ios":
         base = f"{app.exe_name}-{app.version}-ios-{app.sdk}"
+    elif app.native_host_build:
+        # ホストのコンパイラ・glibc に依存するので配布用ではない。コンテナ版と取り違えないよう名前を変える
+        base += "-native"
+        log("warning: --native build depends on the host glibc / libstdc++ (not for distribution; use the container build)")
 
     for fmt in app.packages():
         if fmt == "ipa":
