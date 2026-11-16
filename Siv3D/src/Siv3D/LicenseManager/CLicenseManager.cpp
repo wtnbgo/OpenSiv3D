@@ -13,6 +13,9 @@
 # include <Siv3D/FileSystem.hpp>
 # include "CLicenseManager.hpp"
 # include "LicenseList.hpp"
+# if defined(SIV3D_USE_SDL3)
+#	include "LicenseList_SDL3.hpp"
+# endif
 
 namespace s3d
 {
@@ -20,6 +23,16 @@ namespace s3d
 		: m_licenses(std::begin(detail::licenses), std::end(detail::licenses))
 	{
 		m_applicationName = FileSystem::BaseName(FileSystem::ModulePath());
+
+	# if defined(SIV3D_USE_SDL3)
+		// SDL3 版で加わるライブラリ (機種・ビルドオプションで実際に組み込まれるもの)。末尾の空の項目より前に入れる
+		auto it = m_licenses.end();
+		if ((not m_licenses.empty()) && m_licenses.back().title.isEmpty())
+		{
+			--it;
+		}
+		m_licenses.insert(it, std::begin(detail::licensesSDL3), std::end(detail::licensesSDL3));
+	# endif
 	}
 
 	CLicenseManager::~CLicenseManager()

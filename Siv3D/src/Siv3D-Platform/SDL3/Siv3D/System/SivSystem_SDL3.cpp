@@ -28,6 +28,45 @@
 # include <Siv3D/FileSystem.hpp>
 # include <Siv3D/Unicode.hpp>
 # include <SDL3/SDL_misc.h>
+# if SIV3D_PLATFORM(WEB)
+#	include <emscripten.h>
+
+namespace s3d::detail
+{
+	// Web: URL を新しいタブで開く。ローカルの HTML (仮想ファイルシステム) は Blob URL にして開く
+	// (LicenseManager::ShowInBrowser が書き出す Licenses.html など)。ポップアップのブロックで開けない場合は 0
+	EM_JS(int, siv3d_web_open_url, (const char* curl, int isLocalFile), {
+		var url = UTF8ToString(curl);
+		if (isLocalFile) {
+			try {
+				var data = FS.readFile(url);
+				url = URL.createObjectURL(new Blob([data], { type: 'text/html' }));
+				setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+			} catch (e) {
+				console.error('Siv3D: cannot read', url, e);
+				return 0;
+			}
+		}
+		var w = window.open(url, '_blank');
+		if (w) return 1;
+		if (!isLocalFile) return 0;
+		// ポップアップがブロックされた場合: ページの上に重ねて表示する (閉じるボタン付き)
+		var overlay = document.createElement('div');
+		overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
+		var close = document.createElement('button');
+		close.textContent = '× Close';
+		close.style.cssText = 'align-self:flex-end;margin-bottom:8px;font-size:16px;padding:4px 12px;cursor:pointer;';
+		var frame = document.createElement('iframe');
+		frame.src = url;
+		frame.style.cssText = 'flex:1;border:0;background:#fff;';
+		close.addEventListener('click', function() { overlay.remove(); });
+		overlay.appendChild(close);
+		overlay.appendChild(frame);
+		document.body.appendChild(overlay);
+		return 1;
+	});
+}
+# endif
 
 namespace s3d
 {
@@ -335,6 +374,16 @@ namespace s3d
 		# elif SIV3D_PLATFORM(MACOS)
 			char* argv[] = { (char*)"open", urlc.data(), nullptr };
 			return detail::Run("/usr/bin/open", argv);
+		# elif SIV3D_PLATFORM(WEB)
+			return (detail::siv3d_web_open_url(urlc.c_str(), (not isWebPage)) != 0);
+		# elif defined(__ANDROID__)
+			// Android: Web ページは SDL (Intent) で開く。アプリ内のローカルの HTML は他のアプリに渡せない
+			// (FileProvider が要る) ので開かない。ライセンスは LicenseManager::EnumLicenses() でアプリ内に表示する
+			if (not isWebPage)
+			{
+				return false;
+			}
+			return SDL_OpenURL(urlc.c_str());
 		# else
 			char* argv[] = { (char*)"xdg-open", urlc.data(), nullptr };
 			return detail::Run("/usr/bin/xdg-open", argv);
