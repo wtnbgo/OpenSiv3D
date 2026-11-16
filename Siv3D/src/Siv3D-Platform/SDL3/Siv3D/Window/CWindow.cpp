@@ -166,6 +166,15 @@ namespace s3d
 				static_cast<CTextInput*>(SIV3D_ENGINE(TextInput))->onTextEditing(event.edit.text, event.edit.start, event.edit.length);
 			}
 
+		# if SIV3D_PLATFORM(IOS)
+			// iOS: 終了要求 (シグナルなどから SDL が送る SDL_EVENT_QUIT) では終了しない。
+			// iOS のアプリは自分で終了しないのが原則で、Main() を抜けても OS はプロセスを終了させないため、
+			// 受け付けると黒い画面のまま止まってしまう。アプリの終了は OS (ユーザのスワイプなど) に任せる
+			if ((event.type == SDL_EVENT_QUIT) || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED))
+			{
+				LOG_INFO(U"CWindow::update(): quit request ignored on iOS");
+			}
+		# else
 			if (event.type == SDL_EVENT_QUIT)
 			{
 				SIV3D_ENGINE(UserAction)->reportUserActions(UserAction::CloseButtonClicked);
@@ -174,6 +183,7 @@ namespace s3d
 			{
 				SIV3D_ENGINE(UserAction)->reportUserActions(UserAction::CloseButtonClicked);
 			}
+		# endif
 		# if defined(__ANDROID__)
 			else if ((event.type == SDL_EVENT_KEY_DOWN) && (event.key.key == SDLK_AC_BACK) && (not event.key.repeat))
 			{
