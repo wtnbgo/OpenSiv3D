@@ -91,3 +91,7 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
 2026-11-16、Windows 11 / emsdk 6.0.6 でビルドし、Chromium 系ブラウザで `SDL3/App/Main.cpp` のデモ (テクスチャ・絵文字・
 MSDF フォント・日本語・GUI) の描画とマウス入力 (GUI のボタン) を確認しました。テンプレート (siv3d_app) の `--target web` で
 zip まで作れることも確認しました。
+
+あわせて、確認用のページ (セーブデータの保存・画像・スクリプト・HTTP を自動判定し、日本語と絵文字・スクリプトの描画・入力・
+音声を目視で確認するもの) で、Chromium 系ブラウザ・Firefox・Safari (macOS) のいずれでも動作に問題がないことを確認しました。
+動画 (`VideoTexture`) は Chromium 系ブラウザで確認しています。
