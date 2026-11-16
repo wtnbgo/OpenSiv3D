@@ -12,6 +12,7 @@ SDL3 + OpenGL ES 3.0 バックエンドを iOS でビルドし、シミュレー
 |---|---|
 | macOS | 15.8 (Intel x86_64) |
 | Xcode | 26.3 (iOS SDK 26.2、iOS シミュレータのランタイム) |
+| 実機 | iPhone 11 (iOS 26.5) |
 | CMake | 3.31 (3.21 以上) |
 | vcpkg | 環境変数 `VCPKG_ROOT` を設定しておく |
 | Python | 3.9 以上 (`tools/siv3d_app.py` を使う場合) |
@@ -32,7 +33,7 @@ python3 <SIV3D_BASE>/tools/siv3d_app.py --project . --target ios run
 python3 <SIV3D_BASE>/tools/siv3d_app.py --project . --target ios --sdk device all
 ```
 
-テンプレートの Makefile では `make ios` / `make ios-run` / `make ios-device` です。
+テンプレートの Makefile では `make ios` / `make ios-run` (シミュレータ) と `make ios-device` / `make ios-device-run` (実機) です。
 
 出力は `build/ios/<sdk>-<arch>/` の下にできます。
 
@@ -56,8 +57,7 @@ build/ios/simulator-x86_64/
   "deploymentTarget": "15.0",       // 対応する iOS の最低バージョン
   "orientations": "landscape",      // "landscape" / "portrait" / "all" または UIInterfaceOrientation* の配列
   "deviceFamily": "1,2",            // 1 = iPhone、2 = iPad
-  "team": "",                       // 実機の署名に使う DEVELOPMENT_TEAM (Apple Developer の Team ID)
-  "cmake": { "options": { "SIV3D_WITH_MOVIEPLAYER": "OFF" } }
+  "team": ""                        // 実機の署名に使う DEVELOPMENT_TEAM (Apple Developer の Team ID。普通は siv3d-app.local.json に書く)
 }
 ```
 
@@ -90,6 +90,8 @@ cmake --build build/ios-sim --config Release -- -sdk iphonesimulator -arch x86_6
 - **Xcode からの CMake の再実行**: Xcode ジェネレータは、CMakeLists.txt などが変わると xcodebuild の中 (ZERO_CHECK) で CMake を再実行します。その環境 (`SDKROOT` や `IPHONEOS_DEPLOYMENT_TARGET`) のまま vcpkg が動くと、ホスト用のツール (flatc など) が iOS 向けにビルドされて失敗し、バイナリキャッシュにも残ります。`cmake/Siv3DVcpkg.cmake` が xcodebuild の中ではこれらの環境変数を取り除き、`siv3d_app.py` は iOS のビルドの前に必ず xcodebuild の外で configure します。
 - **SIMD**: arm64 (実機と Apple Silicon のシミュレータ) は simde 経路を使います。Intel Mac のシミュレータ (x86_64) は、macOS と同じく SSE4.1 の経路を使います (既定では SSE4.1 が無効なので `-msse4.1` を付けています)。
 - **音声**: soloud の miniaudio バックエンド (Core Audio / AVAudioSession) を使います。miniaudio は AVFoundation を使うので、`soloud_miniaudio.cpp` は iOS では Objective-C++ としてコンパイルします。
+- **終了要求**: iOS では、SDL が送る終了要求 (`SDL_EVENT_QUIT` / ウィンドウを閉じる要求。デバッガやコンソールの切断などのシグナルで届く) を受け付けません。iOS は `Main()` を抜けてもプロセスを終了させず、黒い画面のまま残ってしまうためです。アプリの終了は OS (ユーザのスワイプなど) に任せます。アプリが自分で `System::Exit()` を呼んだ場合は、同じく黒い画面で止まるので、iOS では呼ばないでください。
+- **バックグラウンド**: ホーム画面に戻る・ほかのアプリに切り替えるなどでバックグラウンドに入り、戻ってきた後も描画は続きます。
 
 ## iOS で使えない・制限のある機能
 
@@ -100,13 +102,16 @@ cmake --build build/ios-sim --config Release -- -sdk iphonesimulator -arch x86_6
 | `System::LaunchBrowser` / `LaunchFile` | `SDL_OpenURL` で開く (ローカルのファイルは `file://`) |
 | `System::ShowInFileManager` / `LaunchFileWithTextEditor` | false を返す |
 | シリアル通信 | ポートの列挙は常に空 |
-| WebM (movie-player) | 既定で OFF。vcpkg の libvpx が iOS シミュレータ向けにビルドできないため (`SIV3D_WITH_MOVIEPLAYER=ON` で実機向けは有効にできる見込み) |
+| WebM (movie-player) | 使えない (`SIV3D_WITH_MOVIEPLAYER` は iOS では常に OFF。vcpkg の libvpx が iOS シミュレータ向けにビルドできないため) |
+| 文字入力 (ソフトウェアキーボード) | 入力欄が入力中の間だけキーボードを出す。SimpleGUI の `TextBox` / `TextArea` は自動。独自の入力欄は、入力中の間 `TextInput::SetEditingArea` を毎フレーム呼ぶ。入力欄の外をタップすると閉じ、ユーザが閉じた後はもう一度タップで出し直す。**シミュレータでは、ソフトウェアキーボードの ⌫ が効かない** (Mac のキーボードが接続されているとみなされ、SDL が `SDL_HasKeyboard()` のときにソフトウェアキーボードの BS を捨てるため)。実機での確認と SDL の修正は今後の検討事項 |
+| ライセンス一覧 (`LicenseManager::ShowInBrowser` / F1) | ブラウザでは表示できない。アプリ内に表示する (テンプレートの `LicenseView.hpp` と [Licenses] ボタン) |
 | ディスプレイ情報 (infoware) | 空 |
+| CPU 情報 (`GetCPUInfo`、起動時のログ) | CPU 名・個数は取れない (ログは `Apple 0.0.0 (… 0)` となる。動作には影響しない) |
 
 ## 確認状況
 
-- iOS シミュレータ (x86_64、Intel Mac、iOS 26.3 / 18.5): テンプレートの MyApp が起動し、画像 (assets/windmill.png) と文字 (MSDF フォント) が横向きで表示され、音声 (MiniAudio) も初期化されることを確認。描画は Apple のソフトウェアレンダラ (OpenGL ES 3.0) です。
-- 実機 (arm64-ios): ビルド (コンパイルとリンク、署名なし) まで確認。実機での起動は未確認 (Team ID による署名が必要)。
+- iOS シミュレータ (x86_64、Intel Mac、iOS 26.3 / 18.5): テンプレートの MyApp が起動し、画像 (assets/windmill.png) と文字 (MSDF フォント) が横向きで表示され、音声 (MiniAudio) も初期化されることを確認。描画は Apple のソフトウェアレンダラ (OpenGL ES 3.0) です。バックグラウンドから戻った後の描画、アプリ内のライセンス一覧 (表示・ドラッグでのスクロール・Close)、ソフトウェアキーボードの開閉と文字入力 (上の制限を除く) も確認済み。
+- 実機 (iPhone 11、iOS 26.5): `siv3d-app.local.json` に Team ID を書いて `make ios-device` で署名付きでビルドし (Apple Development の自動署名)、`make ios-device-run` でインストールして起動。画像と文字が表示されることを確認。描画は Apple A13 GPU (OpenGL ES 3.0 Metal)、音声は MiniAudio、起動時の OpenGL のエラーなし。ソフトウェアキーボードでの文字入力は、実機では未確認です。
 
 ## うまくいかないとき
 
