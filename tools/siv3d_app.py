@@ -64,6 +64,11 @@ def fail(message):
 
 def host_target():
     system = platform.system()
+    if system.startswith(("MSYS", "MINGW", "CYGWIN")):
+        # msys2 / Cygwin の Python はパスが /c/... になり、MSVC や CMake (Windows 版) と合わない
+        # (msys2 の make を使うと PATH の先頭の msys2 の python が選ばれることがある)
+        fail(f"unsupported Python ({system}, {sys.executable}): use the Windows Python "
+             "(python.org / py launcher / scoop), e.g. make PYTHON=py")
     if system == "Windows":
         return "windows"
     if system == "Darwin":
@@ -165,7 +170,10 @@ def msvc_env():
     vcvars = Path(install[0]) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
     log(f"using {vcvars}")
 
-    output = subprocess.run(f'"{vcvars}" >nul && set', shell=True, capture_output=True, text=True).stdout
+    # cmd /U: 内部コマンド (set) の出力を UTF-16 にする。コードページ (cp932 など) で読むと、
+    # 環境変数に含まれる UTF-8 などのバイト列で UnicodeDecodeError になることがある
+    raw = subprocess.run(f'cmd /U /C ""{vcvars}" >nul && set"', capture_output=True).stdout
+    output = raw.decode("utf-16-le", errors="replace")
     env = {}
     for line in output.splitlines():
         if "=" in line:
