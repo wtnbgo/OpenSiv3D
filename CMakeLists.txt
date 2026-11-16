@@ -29,6 +29,16 @@ else()
 endif()
 set(SIV3D_LINUX_DESKTOP ${SIV3D_LINUX_DESKTOP} CACHE INTERNAL "")
 
+# gcc 15 以降: C の既定が gnu23 になり、ThirdParty の C ライブラリ (Oniguruma など) が通らない
+# (C23 では int (*)() が引数なしの意味になり、互換のない関数ポインタの代入がエラーになる)。
+# gcc 14 まで (sniper SDK の gcc-14 など) の既定と同じ gnu17 を C にだけ指定する。
+# (target_compile_features の c_std_11 は「C11 以上」の意味なので、C23 が既定だと -std を付けない。
+#  CMAKE_C_STANDARD で指定すると、C_EXTENSIONS OFF のターゲットが厳密な -std=c17 になり、
+#  M_PI や alloca・POSIX の関数が見えなくなるので使わない)。gcc 14 以前・Clang・MSVC には影響しない
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-std=gnu17>)
+endif()
+
 if(EMSCRIPTEN)
   # Web: DirectXMath は wasm の SIMD に対応していないので、組み込み関数を使わない実装にする
   # (アプリ側のコードも同じ定義でヘッダを読むよう、Siv3D の INTERFACE にも付ける)
