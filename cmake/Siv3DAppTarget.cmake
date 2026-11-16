@@ -137,7 +137,19 @@ function(siv3d_add_app target)
     _siv3d_json_get(_web_shell "${_json}" "${SIV3D_SOURCE_DIR}/SDL3/Web/shell.html" web shell)
     get_filename_component(_web_shell "${_web_shell}" ABSOLUTE BASE_DIR "${_config_dir}")
 
+    _siv3d_json_get(_web_persist "${_json}" "ON" web persist)
+
     set_target_properties(${target} PROPERTIES SUFFIX ".html")
+
+    # セーブデータの永続化: ホームフォルダ (/home/<exeName>) を IndexedDB (IDBFS) にする (SDL3/Web/persist.pre.js.in)
+    if(_web_persist)
+      string(REGEX REPLACE "[^A-Za-z0-9_.-]" "_" _web_home_name "${_exe_name}")
+      set(SIV3D_WEB_HOME "/home/${_web_home_name}")
+      set(_web_pre_js "${CMAKE_CURRENT_BINARY_DIR}/${target}-persist.pre.js")
+      configure_file("${SIV3D_SOURCE_DIR}/SDL3/Web/persist.pre.js.in" "${_web_pre_js}" @ONLY)
+      target_link_options(${target} PRIVATE "SHELL:--pre-js \"${_web_pre_js}\"")
+      set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${_web_pre_js}")
+    endif()
     target_link_options(${target} PRIVATE
       # while (System::Update()) のループからブラウザに制御を返す (CRenderer_GLES3::present)
       "SHELL:-s ASYNCIFY=1"

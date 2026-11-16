@@ -1,0 +1,36 @@
+// Siv3D (SDL3 版) Web: セーブデータの永続化 (siv3d_add_app が --pre-js で組み込む)
+//
+// ホームフォルダ (@SIV3D_WEB_HOME@) をブラウザの IndexedDB に保存される IDBFS にする。
+//   - 起動時 (main の前): IndexedDB の内容をホームフォルダに読み込む (読み終わるまで main を始めない)
+//   - 実行中: ファイルを閉じたとき・削除や名前の変更のときに、自動で IndexedDB に書き戻す (autoPersist)
+// FileSystem::GetFolderPath(SpecialFolder::Documents / LocalAppData / UserProfile) などはホームフォルダの下を指す。
+// ホームフォルダはアプリごと (exeName) に分け、同じサイトに置いた別のアプリとセーブデータが混ざらないようにする。
+
+if (typeof ENVIRONMENT_IS_PTHREAD === 'undefined' || !ENVIRONMENT_IS_PTHREAD) {
+  Module['preRun'] = [].concat(Module['preRun'] || []);
+  Module['preRun'].push(function () {
+    var home = '@SIV3D_WEB_HOME@';
+
+    // getenv("HOME") の値 (Emscripten の既定は /home/web_user)
+    if (typeof ENV !== 'undefined') {
+      ENV['HOME'] = home;
+    }
+
+    FS.mkdirTree(home);
+
+    if (typeof indexedDB === 'undefined') {
+      console.warn('[Siv3D] IndexedDB is not available. Save data will not persist.');
+      return;
+    }
+
+    FS.mount(IDBFS, { autoPersist: true }, home);
+
+    addRunDependency('siv3d-idbfs');
+    FS.syncfs(true, function (err) {
+      if (err) {
+        console.warn('[Siv3D] Failed to load save data from IndexedDB:', err);
+      }
+      removeRunDependency('siv3d-idbfs');
+    });
+  });
+}

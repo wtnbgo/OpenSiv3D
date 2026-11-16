@@ -50,6 +50,13 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
   `SDL_GL_SwapWindow` の後に `requestAnimationFrame` まで待ち (EM_ASYNC_JS + ASYNCIFY)、ブラウザに制御を返します。
 - **描画**: WebGL 2。GLES3 のシェーダ (`shader/essl`) はそのまま使えます。
 - **ファイル**: エンジンのリソースは `/resources/engine/`、アセットは `/<to>/` に置かれ、カレントディレクトリは `/` です。
+- **セーブデータ**: ホームフォルダ `/home/<exeName>` をブラウザの IndexedDB に保存される IDBFS にしています
+  (`SDL3/Web/persist.pre.js.in` を `--pre-js` で組み込む)。起動時 (`Main` の前) に IndexedDB の内容を読み込み、
+  ファイルを閉じたとき・削除や名前の変更のときに自動で書き戻します (IDBFS の autoPersist)。
+  `SpecialFolder::Documents` / `LocalAppData` / `UserProfile` などはホームフォルダの下を指すので、そこに書けば保存されます。
+  エンジンのキャッシュ (展開したフォントなど) と `FileSystem::TemporaryDirectoryPath()` は `/tmp/` に置き、保存しません。
+  IndexedDB はサイト (オリジン) ごとで、データベース名がホームフォルダのパスなので、同じサイトに置いた別のアプリとは
+  `exeName` で分かれます。`siv3d-app.json` の `web.persist` を `false` にすると無効になります。
 - **HTTP**: curl の代わりに Emscripten の fetch API (`Siv3D/src/Siv3D/Network/WebFetch.hpp`)。ブラウザの制約 (CORS) を受けます。
 - **音声**: SoLoud の miniaudio (Web Audio)。
 - **依存ライブラリ**: vcpkg の harfbuzz ポートは emcc の `-Werror` で失敗するので、ソースを FetchContent してまとめ済みソースを
@@ -61,7 +68,8 @@ Web 版はスレッド (SharedArrayBuffer) を使うため、**`Cross-Origin-Ope
 - **動画**: movie-player (libvpx) は vcpkg の libvpx が wasm に対応していないため無効です。OpenCV の動画も読めません。
 - **ダイアログ**: SDL3 のファイルダイアログは Web では使えず、結果なしが返ります。
 - **ファイルの変更監視・ゴミ箱**: 無効です。
-- **セーブデータの永続化**: まだ IndexedDB (IDBFS) に保存していません (ページを閉じると消えます)。
+- **セーブデータ**: カレントディレクトリ (`/`) の直下に書いたファイルは保存されません (ページを閉じると消えます)。ホームフォルダの下に書いてください。
+  ブラウザのプライベートモードや、サイトのデータを消したときは消えます。
 - **音声の自動再生**: ブラウザの自動再生制限により、ページを操作するまで音が出ないことがあります。
 - 一瞬で押して離す操作 (自動化ツールのクリックなど) は取りこぼすことがあります (人の操作では問題ありません)。
 - ページの読み込みは `.data` (エンジンのリソース約 38MB + アセット) のダウンロードを含みます。

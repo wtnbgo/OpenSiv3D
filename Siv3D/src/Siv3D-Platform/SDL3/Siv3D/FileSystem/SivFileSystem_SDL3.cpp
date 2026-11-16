@@ -681,6 +681,17 @@ namespace s3d
 				return specialFolderPaths;
 			# endif
 
+			# if SIV3D_PLATFORM(WEB)
+				// Web: ホームフォルダ (/home/<exeName>) は IndexedDB に保存される (SDL3/Web/persist.pre.js.in)。
+				// セーブデータの置き場所として、ホームフォルダの下に各フォルダを用意する
+				specialFolderPaths[FromEnum(SpecialFolder::Desktop)]		= (homeDirectory + U"/Desktop/");
+				specialFolderPaths[FromEnum(SpecialFolder::Documents)]		= (homeDirectory + U"/Documents/");
+				specialFolderPaths[FromEnum(SpecialFolder::Music)]			= (homeDirectory + U"/Music/");
+				specialFolderPaths[FromEnum(SpecialFolder::Pictures)]		= (homeDirectory + U"/Pictures/");
+				specialFolderPaths[FromEnum(SpecialFolder::Videos)]			= (homeDirectory + U"/Videos/");
+				return specialFolderPaths;
+			# endif
+
 				const FilePath iniFilePath = homeDirectory + U"/.config/user-dirs.dirs";
 
 				if (not FileSystem::Exists(iniFilePath))
@@ -1020,7 +1031,12 @@ namespace s3d
 
 		FilePath TemporaryDirectoryPath()
 		{
+		# if SIV3D_PLATFORM(WEB)
+			// Web: ホームフォルダは IndexedDB に保存されるので、一時ファイルはその外 (メモリ上だけ) に置く
+			return U"/tmp/";
+		# else
 			return (GetFolderPath(SpecialFolder::LocalAppData) + U"Temp/");
+		# endif
 		}
 
 		FilePath RelativePath(const FilePathView _path, const FilePathView _start)

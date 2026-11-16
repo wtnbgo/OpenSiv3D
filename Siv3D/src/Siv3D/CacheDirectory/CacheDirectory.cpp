@@ -49,8 +49,14 @@ namespace s3d
 	{
 		FilePath Engine()
 		{
+		# if SIV3D_PLATFORM(WEB)
+			// Web: LocalAppData (ホームフォルダの下) は IndexedDB に保存されるので、起動のたびに作り直せる
+			// エンジンのキャッシュ (展開したフォントなど、数十 MB) はその外 (メモリ上だけ) に置く
+			return U"/tmp/Siv3D/" SIV3D_VERSION_STRING U"/";
+		# else
 			return FileSystem::GetFolderPath(SpecialFolder::LocalAppData)
 				+ U"Siv3D/" SIV3D_VERSION_STRING U"/";
+		# endif
 		}
 
 		FilePath Apps(const StringView applicationName)
