@@ -57,7 +57,7 @@ namespace s3d
 			{
 				.title		= license.title,
 				.copyright	= license.copyright,
-				.text		= license.text.xml_escaped()
+				.text		= license.text // HTML へのエスケープは ShowInBrowser が行う
 			};
 			m_licenses.push_front(info);
 

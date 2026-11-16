@@ -12,6 +12,7 @@
 # include <Siv3D/LicenseManager.hpp>
 # include <Siv3D/FileSystem.hpp>
 # include <Siv3D/TextWriter.hpp>
+# include <Siv3D/TextReader.hpp>
 # include <Siv3D/System.hpp>
 # include <Siv3D/LicenseManager/ILicenseManager.hpp>
 # include <Siv3D/Common/Siv3DEngine.hpp>
@@ -65,6 +66,82 @@ div.c2		{ padding-bottom: 24px; color: #888888; text-align: center; font-size: 9
 			SIV3D_ENGINE(LicenseManager)->addLicense(license);
 		}
 
+		size_t AddLicenseFiles(const FilePathView directory)
+		{
+			if (not FileSystem::IsDirectory(directory))
+			{
+				return 0;
+			}
+
+			Array<FilePath> files = FileSystem::DirectoryContents(directory, Recursive::No)
+				.filter([](const FilePath& path) { return (FileSystem::Extension(path) == U"txt"); });
+			files.sort();
+
+			size_t count = 0;
+
+			for (const auto& path : files)
+			{
+				TextReader reader{ path };
+
+				if (not reader)
+				{
+					continue;
+				}
+
+				LicenseInfo license;
+				Array<String> copyrights;
+				Array<String> body;
+				bool inHeader = true;
+				String line;
+
+				while (reader.readLine(line))
+				{
+					if (inHeader)
+					{
+						if (line.starts_with(U"Title:"))
+						{
+							license.title = line.substr(6).trimmed();
+							continue;
+						}
+						else if (line.starts_with(U"Copyright:"))
+						{
+							copyrights << line.substr(10).trimmed();
+							continue;
+						}
+						else if (line.trimmed().isEmpty())
+						{
+							// ヘッダの後の空行 (本文の先頭の空行は読み飛ばす)
+							continue;
+						}
+
+						inHeader = false;
+					}
+
+					body << line;
+				}
+
+				// 本文の末尾の空行を除く
+				while (body && body.back().trimmed().isEmpty())
+				{
+					body.pop_back();
+				}
+
+				if (license.title.isEmpty())
+				{
+					license.title = FileSystem::BaseName(path);
+				}
+
+				license.copyright = copyrights.join(U"\n", U"", U"");
+				// 一覧には普通のテキストのまま入れる (HTML へのエスケープは ShowInBrowser が行う。アプリ内の表示はそのまま使える)
+				license.text = body.join(U"\n", U"", U"");
+
+				AddLicense(license);
+				++count;
+			}
+
+			return count;
+		}
+
 		const Array<LicenseInfo>& EnumLicenses()
 		{
 			return SIV3D_ENGINE(LicenseManager)->enumLicenses();
@@ -99,7 +176,8 @@ div.c2		{ padding-bottom: 24px; color: #888888; text-align: center; font-size: 9
 					writer.writelnUTF8(detail::divEnd);
 
 					writer.writelnUTF8(detail::licenseC2);
-					writer.writeln(license.text.replaced(U"\n", U"<br>"));
+					// 本文も普通のテキストとして扱い、HTML にするときにエスケープする (内蔵の一覧の本文に HTML は無い)
+					writer.writeln(license.text.xml_escaped().replaced(U"\n", U"<br>"));
 					writer.writelnUTF8(detail::divEnd);
 				}
 

@@ -27,6 +27,14 @@ namespace s3d
 		/// @param license ライセンス情報
 		void AddLicense(const LicenseInfo& license);
 
+		/// @brief フォルダ内のライセンスファイル (*.txt) を読み込んで、ライセンス情報の一覧に追加します。
+		/// @param directory ライセンスファイルを置いたフォルダ (例: U"assets/licenses")
+		/// @return 追加したライセンスの数
+		/// @remark ファイル名の順に追加します。ファイルは UTF-8 のテキストで、先頭の `Title: 名前` と `Copyright: 著作権表示`
+		/// (複数行可) の行の後、空行に続けて許諾条件の本文を書きます。`Title:` が無い場合はファイル名を名前にします。
+		/// アプリが同梱するフォントや素材のライセンスを、アセットのフォルダに置いたファイルで追加するために使います。
+		size_t AddLicenseFiles(FilePathView directory);
+
 		/// @brief ライセンス情報一覧を返します。
 		/// @return ライセンス情報一覧
 		[[nodiscard]]

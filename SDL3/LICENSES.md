@@ -26,8 +26,17 @@ Siv3D のアプリを配布するときは、アプリに組み込まれたラ�
 文面は各ライブラリの LICENSE (vcpkg の `share/<port>/copyright` など) をそのまま使っています。ライブラリを足したり
 版を上げたりしたときは、この表と `LicenseList_SDL3.hpp` を見直してください。
 
-アプリ自身のライセンスや、アプリが使う素材 (画像・音声・フォントなど) のライセンスは、アプリ側で
-`LicenseManager::SetApplicationLicense()` / `LicenseManager::AddLicense()` で追加します。
+アプリ自身のライセンスや、アプリが使う素材 (画像・音声・フォントなど) のライセンスは、アプリ側で追加します。
+
+- **ファイルから追加** (SDL3 版で追加): `LicenseManager::AddLicenseFiles(U"assets/licenses")` で、フォルダ内の `*.txt` を
+  ファイル名の順に読み込んで追加します。ファイルは UTF-8 のテキストで、先頭に `Title: 名前` と `Copyright: 著作権表示`
+  (複数行は繰り返す) を書き、空行の後に許諾条件の本文を書きます (`Title:` が無ければファイル名を名前にする)。
+  テンプレート siv3d_app は `assets/licenses/` にエンジン同梱のフォントのライセンスを置き、起動時にこれを呼んでいます。
+- **コードから追加**: `LicenseManager::SetApplicationLicense()` / `LicenseManager::AddLicense()`。
+
+一覧の `text` (許諾条件の本文) は普通のテキストとして扱い、`ShowInBrowser()` が HTML にするときにエスケープします
+(SDL3 版での変更。以前は `SetApplicationLicense()` だけが登録時にエスケープし、`AddLicense()` の本文はそのまま HTML に
+書き出していた)。`&` や `<` もそのまま書けます。
 
 ## 機種ごとの表示方法
 
@@ -74,5 +83,8 @@ for (const auto& license : LicenseManager::EnumLicenses())
 `resources/engine/` のフォント (Noto Sans CJK、M+、Font Awesome、Material Design Icons、Noto Emoji) は、元の Siv3D と
 同じものです。元の Siv3D の一覧には Noto Emoji と Material Design の項目はありますが、**Noto Sans CJK・M+・Font Awesome の
 項目はありません**。Noto Sans CJK と Font Awesome のフォントは SIL Open Font License (OFL) で、フォントを同梱するときに
-著作権表示とライセンス文を添えることを求めているので、配布するアプリでは `LicenseManager::AddLicense()` で追加することを
-おすすめします (使わないフォントは `resources/engine/font/` から外すこともできます)。
+著作権表示とライセンス文を添えることを求めています。テンプレート siv3d_app は、この 3 つのライセンスを `assets/licenses/`
+(`noto-sans-cjk.txt` / `mplus.txt` / `font-awesome.txt`) に置き、`AddLicenseFiles()` で一覧に追加しています
+(使わないフォントを `resources/engine/font/` から外した場合は、対応するファイルも消してかまいません)。
+日本語のフォールバック用の `min/siv3d-min.woff` は、同梱の LICENSE が OFL ですが元のフォントと著作権者の記載がないため、
+テンプレートには含めていません。
