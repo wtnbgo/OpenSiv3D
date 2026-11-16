@@ -19,13 +19,16 @@
 //   move <x> <y>            マウスカーソルを動かす (シーンの座標)
 //   click <x> <y> [l|r|m]   その位置をクリックする (押して離す。1 フレーム以内でも取りこぼさない)
 //   key <キー名>            キーを押して離す (SDL のキー名: A / Space / Return / Escape / F1 / Left など)
-//   info                    シーン・ウィンドウの大きさ、FPS、カーソルの位置を出す
+//   text <文字列>           文字の入力 (IME の確定) を送る (SDL_EVENT_TEXT_INPUT。日本語も可)
+//   editing [文字列]        IME の変換中の文字を送る (SDL_EVENT_TEXT_EDITING。空で変換中を消す)
+//   info                    シーン・ウィンドウの大きさ、FPS、カーソルの位置、文字入力の受付中かを出す
 //   log <文字列>            ログに目印を書く
 //   quit                    アプリを終了する (System::Exit)
 //   # ...                   コメント
 //
 
 # include <cstdlib>
+# include <deque>
 # include <filesystem>
 # include <fstream>
 # include <sstream>
@@ -108,6 +111,15 @@ namespace s3d::detail
 			SDL_PushEvent(&event);
 		}
 
+		// SDL_PushEvent は文字列を複製しないので、イベントが処理されるまで文字列を持っておく (直近の数件)
+		const char* KeepText(const std::string& text)
+		{
+			static std::deque<std::string> texts;
+			texts.push_back(text);
+			while (16 < texts.size()) { texts.pop_front(); }
+			return texts.back().c_str();
+		}
+
 		void Execute(SDL_Window* window, const std::string& line)
 		{
 			std::istringstream iss{ line };
@@ -172,10 +184,39 @@ namespace s3d::detail
 				PushKey(window, scancode, false);
 				LOG_INFO(U"[repl] key {} (scancode {})"_fmt(Unicode::FromUTF8(name), static_cast<int32>(scancode)));
 			}
+			else if ((command == "text") || (command == "editing"))
+			{
+				std::string text;
+				std::getline(iss >> std::ws, text);
+
+				SDL_Event event{};
+				if (command == "text")
+				{
+					if (text.empty())
+					{
+						LOG_INFO(U"[repl] error: usage: text <string>");
+						return;
+					}
+					event.type = SDL_EVENT_TEXT_INPUT;
+					event.text.windowID = SDL_GetWindowID(window);
+					event.text.text = KeepText(text);
+				}
+				else
+				{
+					event.type = SDL_EVENT_TEXT_EDITING;
+					event.edit.windowID = SDL_GetWindowID(window);
+					event.edit.text = KeepText(text);
+					event.edit.start = static_cast<Sint32>(Unicode::FromUTF8(text).size());
+					event.edit.length = 0;
+				}
+				SDL_PushEvent(&event);
+				LOG_INFO(U"[repl] {} \"{}\""_fmt(Unicode::FromUTF8(command), Unicode::FromUTF8(text)));
+			}
 			else if (command == "info")
 			{
-				LOG_INFO(U"[repl] scene {} / window client {} / frame buffer {} / fps {} / cursor {}"_fmt(
-					Scene::Size(), Window::GetState().virtualSize, Window::GetState().frameBufferSize, Profiler::FPS(), Cursor::PosF()));
+				LOG_INFO(U"[repl] scene {} / window client {} / frame buffer {} / fps {} / cursor {} / text input {}"_fmt(
+					Scene::Size(), Window::GetState().virtualSize, Window::GetState().frameBufferSize, Profiler::FPS(), Cursor::PosF(),
+					(SDL_TextInputActive(window) ? U"active" : U"inactive")));
 			}
 			else if (command == "log")
 			{

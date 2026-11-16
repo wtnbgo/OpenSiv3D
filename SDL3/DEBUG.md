@@ -36,7 +36,9 @@ printf 'info\ncapture /tmp/shot.png\n' > /tmp/repl.tmp && mv /tmp/repl.tmp /tmp/
 | `move <x> <y>` | マウスカーソルを動かす (シーンの座標。拡大表示の余白も考慮する)。Wayland のようにポインタがウィンドウ上に無いと OS のカーソルを動かせない環境でも、実際のマウスが動くまでは `Cursor::Pos()` がこの位置になる |
 | `click <x> <y> [l\|r\|m]` | その位置をクリックする (押して離す。1 フレーム以内でも `MouseL.down()` が反応する) |
 | `key <キー名>` | キーを押して離す (SDL のキー名: `A` / `Space` / `Return` / `Escape` / `F1` / `Left` など) |
-| `info` | シーン・ウィンドウ・フレームバッファの大きさ、FPS、カーソルの位置を出す |
+| `text <文字列>` | 文字の入力 (IME の確定) を送る (`SDL_EVENT_TEXT_INPUT`。日本語も可。`TextInput::UpdateText()` や `SimpleGUI::TextBox` に入る) |
+| `editing [文字列]` | IME の変換中の文字を送る (`SDL_EVENT_TEXT_EDITING`。`TextInput::GetEditingText()` に入る。空で変換中を消す) |
+| `info` | シーン・ウィンドウ・フレームバッファの大きさ、FPS、カーソルの位置、文字入力を受け付けているか (`text input active`) を出す |
 | `log <文字列>` | ログに目印を書く |
 | `quit` | アプリを終了する (`System::Exit()`) |
 | `# ...` | コメント |

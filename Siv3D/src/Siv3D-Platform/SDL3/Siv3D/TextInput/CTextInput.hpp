@@ -72,5 +72,21 @@ namespace s3d
 		
 
 		bool m_imeEnabled = true;
+
+		SDL_Window* m_window = nullptr;
+
+		// SDL のテキスト入力を開始しているか (SDL_StartTextInput はウィンドウの指定が必須)
+		bool m_textInputStarted = false;
+
+		// 前回の update の後に、テキスト入力の結果 (getChars / getEditingText) が読まれたか。
+		// Android / iOS では、テキストボックスなどが入力を受け付けている間 (毎フレーム読まれる) だけ
+		// テキスト入力 (ソフトウェアキーボード) を有効にする
+		mutable bool m_inputRequested = false;
+
+		int32 m_idleFrames = 0;
+
+		int32 m_requestedFrames = 0;
+
+		void setTextInputActive(bool active);
 	};
 }

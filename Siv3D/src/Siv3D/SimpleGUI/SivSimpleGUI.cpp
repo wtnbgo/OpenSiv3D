@@ -780,7 +780,7 @@ namespace s3d
 					// text.text を更新する
 					text.cursorPos = TextInput::UpdateText(text.text, text.cursorPos, TextInputMode::AllowBackSpaceDelete);
 
-				# if not SIV3D_PLATFORM(WEB)
+				# if (not SIV3D_PLATFORM(WEB)) || defined(SIV3D_USE_SDL3) // [SDL3] Web もデスクトップと同じ扱い
 
 					// ショートカットキーによるペースト
 					if ((not editingText) &&
@@ -1029,7 +1029,7 @@ namespace s3d
 
 								const std::pair<int32, int32> editingTarget = Platform::Windows::TextInput::GetCursorIndex();
 
-							# elif SIV3D_PLATFORM(WEB)
+							# elif SIV3D_PLATFORM(WEB) && (not defined(SIV3D_USE_SDL3))
 
 								const std::pair<int32, int32> editingTarget = Platform::Web::TextInput::GetCandicateCursorIndex();
 
@@ -1078,7 +1078,9 @@ namespace s3d
 				}
 			}
 
-		# if SIV3D_PLATFORM(WEB)
+		// [SDL3] 以前の Web 版は隠し <input> でテキストを編集し、カーソル位置を同期していた。SDL3 版はデスクトップと
+		// 同じく SDL のテキスト入力で受け取るので使わない (使うと仮の実装のカーソル位置 0 に毎フレーム戻される)
+		# if SIV3D_PLATFORM(WEB) && (not defined(SIV3D_USE_SDL3))
 
 			Platform::Web::TextInput::SetFocusToTextInput(text.active);		
 				
@@ -1137,7 +1139,7 @@ namespace s3d
 					// text.text を更新する
 					text.cursorPos = TextInput::UpdateText(text.text, text.cursorPos, TextInputMode::AllowEnterTabBackSpaceDelete);
 
-				# if not SIV3D_PLATFORM(WEB)
+				# if (not SIV3D_PLATFORM(WEB)) || defined(SIV3D_USE_SDL3) // [SDL3] Web もデスクトップと同じ扱い
 
 					// ショートカットキーによるペースト
 					if ((not editingText) &&
@@ -2268,7 +2270,7 @@ namespace s3d
 
 								const std::pair<int32, int32> editingTarget = Platform::Windows::TextInput::GetCursorIndex();
 
-							# elif SIV3D_PLATFORM(WEB)
+							# elif SIV3D_PLATFORM(WEB) && (not defined(SIV3D_USE_SDL3))
 
 								const std::pair<int32, int32> editingTarget = Platform::Web::TextInput::GetCandicateCursorIndex();
 
