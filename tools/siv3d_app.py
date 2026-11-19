@@ -42,6 +42,10 @@
 #   linux   : sniper SDK のコンテナ (steamdev の deckbuild-sniper イメージ。SDL3/BUILD_LINUX.md を参照)。
 #             Windows は docker または WSL のコンテナ (wslc)、macOS / Linux は docker。
 #             Linux ホストでは --native でホストのコンパイラでもビルドできる
+#   rpmini  : Linux aarch64 (Retroid Pocket Mini、Debian trixie arm64、KMS/DRM 直描画)。steamdev の
+#             deckbuild-rpmini イメージ (deckbuild.sh -T rpmini image) でクロスビルドする。出力は build/rpmini。
+#             run は dist を実機の /data/dev/<exeName>/ に rsync し、rpmini-session で起動し直す
+#             (接続先: siv3d-app.json の rpmini.device、環境変数 RPMINI_DEV、既定 root@192.168.7.2)
 # -----------------------------------------------------------------------------
 
 import argparse
@@ -56,7 +60,12 @@ import zipfile
 from pathlib import Path
 
 SIV3D_BASE = Path(__file__).resolve().parent.parent
-TARGETS = ("windows", "linux", "macos", "ios", "web", "android")
+TARGETS = ("windows", "linux", "rpmini", "macos", "ios", "web", "android")
+# コンテナでビルドする Linux 系ターゲット: (既定イメージ, CC, CXX, vcpkg キャッシュのボリューム)
+CONTAINER_TARGETS = {
+    "linux": ("deckbuild-sniper", "gcc-14", "g++-14", "deckbuild-cache"),
+    "rpmini": ("deckbuild-rpmini", "aarch64-linux-gnu-gcc", "aarch64-linux-gnu-g++", "deckbuild-cache-rpmini"),
+}
 
 
 def log(message):
@@ -161,7 +170,7 @@ class App:
     def packages(self):
         if self.target == "ios":
             return self.target_json.get("package", ["ipa"] if self.sdk == "device" else ["zip"])
-        default = {"windows": ["zip"], "linux": ["tar.gz"], "macos": ["zip"], "web": ["zip"], "android": ["apk"]}[self.target]
+        default = {"windows": ["zip"], "linux": ["tar.gz"], "rpmini": ["tar.gz"], "macos": ["zip"], "web": ["zip"], "android": ["apk"]}[self.target]
         return self.target_json.get("package", default)
 
     def executable(self):
@@ -246,6 +255,14 @@ def configure(app, env):
             fail("EMSDK is not set (install emsdk and set EMSDK to its folder)")
         cmd += ["-DVCPKG_TARGET_TRIPLET=wasm32-emscripten",
                 f"-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE={(SIV3D_BASE / 'cmake' / 'toolchains' / 'wasm32-emscripten.cmake').as_posix()}"]
+    if app.target == "rpmini":
+        # aarch64 クロスビルド (deckbuild-rpmini イメージの toolchain)。vcpkg の ports は triplet arm64-linux
+        # (cmake/vcpkg-triplets) で vcpkg の linux.cmake がクロスコンパイラを選ぶ。SDL3 は X11/Wayland 無しの
+        # KMS/DRM で使うので、デスクトップ用バックエンド無しの configure を許可する
+        cmd += ["-DVCPKG_TARGET_TRIPLET=arm64-linux",
+                "-DVCPKG_TARGET_ARCHITECTURE=arm64",
+                "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=" + os.environ.get("RPMINI_TOOLCHAIN", "/opt/rpmini/aarch64-linux-gnu.cmake"),
+                "-DSDL_UNIX_CONSOLE_BUILD=ON"]
     cmd += app.cmake_options()
     run(cmd, env=env)
 
@@ -454,8 +471,24 @@ def run_app(app):
         log(f"open http://127.0.0.1:{port}/{exe.name}")
         subprocess.run([sys.executable, str(app.dist_dir / "serve.py"), port, str(app.dist_dir)])
         return
+    if app.target == "rpmini":
+        run_rpmini(app)
+        return
     log(f"run: {exe}")
     subprocess.run([str(exe)], cwd=exe.parent)
+
+
+def run_rpmini(app):
+    # dist を実機の /data/dev/<exeName>/ に置き、rpmini-session (起動時に全画面で動かすサービス) の
+    # アプリを差し替えて起動し直す。元に戻すには実機で rm /data/dev/session.env して restart
+    dev = os.environ.get("RPMINI_DEV") or app.target_json.get("device", "root@192.168.7.2")
+    dest = f"/data/dev/{app.exe_name}"
+    log(f"deploy: {app.dist_dir} -> {dev}:{dest}")
+    run(["rsync", "-a", "--delete", f"{app.dist_dir}/", f"{dev}:{dest}/"])
+    env_line = f"RPMINI_APP={dest}/{app.exe_name}"
+    run(["ssh", dev, f"chmod -R a+rX {dest} && echo '{env_line}' > /data/dev/session.env "
+                     f"&& systemctl restart rpmini-session && sleep 2 && systemctl is-active rpmini-session"])
+    log(f"running on {dev} (logs: ssh {dev} journalctl -u rpmini-session -f)")
 
 
 def clean(app):
@@ -513,7 +546,8 @@ def container_engine(requested):
 
 
 def run_in_container(app, args, commands):
-    image = args.container or app.target_json.get("container", "deckbuild-sniper")
+    def_image, cc, cxx, cache_vol = CONTAINER_TARGETS[app.target]
+    image = args.container or app.target_json.get("container", def_image)
     engine = container_engine(args.engine or app.target_json.get("engine"))
     log(f"container: {engine} / {image}")
 
@@ -521,14 +555,14 @@ def run_in_container(app, args, commands):
     # コンパイラ・vcpkg のバイナリキャッシュ (名前付きボリューム deckbuild-cache) は steamdev の
     # deckbuild.sh と同じ設定にする (sniper SDK の既定の gcc は古いので gcc-14 を使う)
     inner = " ".join(["mkdir -p /cache/vcpkg-bincache &&",
-                      "python3", "/siv3d/tools/siv3d_app.py", "--native", "--in-container", "--target", "linux",
+                      "python3", "/siv3d/tools/siv3d_app.py", "--native", "--in-container", "--target", app.target,
                       "--config", app.config, "--project", "/app"] + commands)
     cmd = [engine, "run", "--rm",
            "-v", f"{app.project_dir}:/app",
            "-v", f"{SIV3D_BASE}:/siv3d",
-           "-v", "deckbuild-cache:/cache",
+           "-v", f"{cache_vol}:/cache",
            "-e", "VCPKG_DEFAULT_BINARY_CACHE=/cache/vcpkg-bincache",
-           "-e", "CC=gcc-14", "-e", "CXX=g++-14",
+           "-e", f"CC={cc}", "-e", f"CXX={cxx}",
            "-w", "/app",
            image, "bash", "-c", inner]
     try:
@@ -644,11 +678,12 @@ def main():
         if host != "macos":
             fail("target 'ios' can be built only on macOS")
     # web / android はどのホストでもビルドできる (emsdk / Android SDK)。linux は他のホストではコンテナでビルドする
-    elif app.target != host and app.target not in ("web", "android") and not (app.target == "linux" and not args.native):
+    elif (app.target != host and app.target not in ("web", "android", "rpmini")
+          and not (app.target == "linux" and not args.native)):
         fail(f"target '{app.target}' cannot be built on {host}")
 
     # linux: ネイティブ指定が無ければコンテナでビルドする (info / clean / run はホストで実行)
-    if app.target == "linux" and not args.native and any(c in ("configure", "build", "stage", "package") for c in commands):
+    if app.target in CONTAINER_TARGETS and not args.native and any(c in ("configure", "build", "stage", "package") for c in commands):
         container_cmds = [c for c in commands if c in ("configure", "build", "stage", "package")]
         run_in_container(app, args, container_cmds)
         commands = [c for c in commands if c not in container_cmds]
