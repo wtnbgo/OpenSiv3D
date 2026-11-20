@@ -9,6 +9,8 @@
 //
 //-----------------------------------------------
 
+# include <cstring>
+# include <cstdlib>
 # include <Siv3D/Error.hpp>
 # include <Siv3D/EngineLog.hpp>
 # include <Siv3D/FormatLiteral.hpp>
@@ -155,6 +157,19 @@ namespace s3d
 		SDL_ShowWindow(m_window);
 
 		updateState();
+
+		// SIV3D_FULLSCREEN=1: start in full screen (fixed-screen devices such as a handheld
+		// running the app under a kiosk compositor). The scene keeps its size and is scaled.
+		// Not setFullscreen(): the renderer does not exist yet at this point.
+		if (const char* fs = std::getenv("SIV3D_FULLSCREEN"); fs && (std::strcmp(fs, "1") == 0))
+		{
+			int x, y, w, h;
+			SDL_GetWindowPosition(m_window, &x, &y);
+			SDL_GetWindowSize(m_window, &w, &h);
+			m_storedWindowRect = Rect(x, y, w, h);
+			SDL_SetWindowFullscreen(m_window, true);
+			m_state.fullscreen = true;
+		}
 	}
 
 	void CWindow::update()
