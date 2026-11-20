@@ -44,7 +44,7 @@
 #             Linux ホストでは --native でホストのコンパイラでもビルドできる
 #   rpmini  : Linux aarch64 (Retroid Pocket Mini、Debian trixie arm64、KMS/DRM 直描画)。steamdev の
 #             deckbuild-rpmini イメージ (deckbuild.sh -T rpmini image) でクロスビルドする。出力は build/rpmini。
-#             run は dist を実機の /data/dev/<exeName>/ に rsync し、ランチャー (rpmini-launcher) に
+#             run は dist を実機の /data/dev/<exeName>/ に rsync し、hako のランチャー (hako-launcher) に
 #             /data/dev/apps/<exeName>.app で登録して起動する (表示名: rpmini.name、既定 exeName。
 #             接続先: siv3d-app.json の rpmini.device、環境変数 RPMINI_DEV、既定 root@192.168.7.2)
 # -----------------------------------------------------------------------------
@@ -500,14 +500,14 @@ if [ -f /data/dev/session.env ] && grep -qx 'RPMINI_APP={dest}/{app.exe_name}' /
    && [ "$(grep -cv '^[[:space:]]*$' /data/dev/session.env)" = 1 ]; then
     echo 'removing /data/dev/session.env (old run method)'
     rm -f /data/dev/session.env
-    systemctl restart rpmini-session
+    systemctl restart hako-session
 fi
-for i in $(seq 50); do pgrep -x rpmini-launcher >/dev/null && break; sleep 0.2; done
+for i in $(seq 50); do pgrep -x hako-launcher >/dev/null && break; sleep 0.2; done
 sleep 0.5
-/usr/lib/rpmini/launch-app {app.exe_name}
+/usr/lib/hako/launch-app {app.exe_name}
 """
     run(["ssh", dev, script])
-    log(f"running on {dev} via rpmini-launcher (logs: ssh {dev} 'journalctl -f _UID=$(id -u rpmini)')")
+    log(f"running on {dev} via hako-launcher (logs: ssh {dev} 'journalctl -f _UID=$(id -u hako)')")
 
 
 def clean(app):
