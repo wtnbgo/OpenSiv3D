@@ -44,8 +44,9 @@
 #             Linux ホストでは --native でホストのコンパイラでもビルドできる
 #   rpmini  : Linux aarch64 (Retroid Pocket Mini、Debian trixie arm64、KMS/DRM 直描画)。steamdev の
 #             deckbuild-rpmini イメージ (deckbuild.sh -T rpmini image) でクロスビルドする。出力は build/rpmini。
-#             run は dist を実機の /data/dev/<exeName>/ に rsync し、rpmini-session で起動し直す
-#             (接続先: siv3d-app.json の rpmini.device、環境変数 RPMINI_DEV、既定 root@192.168.7.2)
+#             run は dist を実機の /data/dev/<exeName>/ に rsync し、ランチャー (rpmini-launcher) に
+#             /data/dev/apps/<exeName>.app で登録して起動する (表示名: rpmini.name、既定 exeName。
+#             接続先: siv3d-app.json の rpmini.device、環境変数 RPMINI_DEV、既定 root@192.168.7.2)
 # -----------------------------------------------------------------------------
 
 import argparse
@@ -479,16 +480,34 @@ def run_app(app):
 
 
 def run_rpmini(app):
-    # dist を実機の /data/dev/<exeName>/ に置き、rpmini-session (起動時に全画面で動かすサービス) の
-    # アプリを差し替えて起動し直す。元に戻すには実機で rm /data/dev/session.env して restart
+    # dist を実機の /data/dev/<exeName>/ に置き、ランチャーに /data/dev/apps/<exeName>.app で登録して
+    # 起動させる (launch-app。動いているアプリがあれば閉じてから)。終了するとランチャーの一覧に戻る。
+    # 以前の方式 (/data/dev/session.env でセッションのアプリを差し替え) が残っていれば外す
     dev = os.environ.get("RPMINI_DEV") or app.target_json.get("device", "root@192.168.7.2")
     dest = f"/data/dev/{app.exe_name}"
+    name = app.target_json.get("name") or app.exe_name
     log(f"deploy: {app.dist_dir} -> {dev}:{dest}")
     run(["rsync", "-a", "--delete", f"{app.dist_dir}/", f"{dev}:{dest}/"])
-    env_line = f"RPMINI_APP={dest}/{app.exe_name}"
-    run(["ssh", dev, f"chmod -R a+rX {dest} && echo '{env_line}' > /data/dev/session.env "
-                     f"&& systemctl restart rpmini-session && sleep 2 && systemctl is-active rpmini-session"])
-    log(f"running on {dev} (logs: ssh {dev} journalctl -u rpmini-session -f)")
+    entry = f"Name={name}\nExec={dest}/{app.exe_name}\n"
+    script = f"""set -e
+chmod -R a+rX {dest}
+mkdir -p /data/dev/apps
+cat > /data/dev/apps/{app.exe_name}.app <<'EOF'
+# siv3d_app.py --target rpmini run
+{entry}EOF
+chmod a+r /data/dev/apps/{app.exe_name}.app
+if [ -f /data/dev/session.env ] && grep -qx 'RPMINI_APP={dest}/{app.exe_name}' /data/dev/session.env \\
+   && [ "$(grep -cv '^[[:space:]]*$' /data/dev/session.env)" = 1 ]; then
+    echo 'removing /data/dev/session.env (old run method)'
+    rm -f /data/dev/session.env
+    systemctl restart rpmini-session
+fi
+for i in $(seq 50); do pgrep -x rpmini-launcher >/dev/null && break; sleep 0.2; done
+sleep 0.5
+/usr/lib/rpmini/launch-app {app.exe_name}
+"""
+    run(["ssh", dev, script])
+    log(f"running on {dev} via rpmini-launcher (logs: ssh {dev} 'journalctl -f _UID=$(id -u rpmini)')")
 
 
 def clean(app):
