@@ -126,7 +126,10 @@ namespace s3d
 
 	void CRenderer_GLES3::clear()
 	{
-		m_backBuffer->clear(GLES3ClearTarget::Scene);
+		// Clear the letterbox as well, every frame: the back buffer is cleared only once when the
+		// scene size changes, and with double buffering the other buffer keeps the old picture in
+		// the letterbox (it flickers after e.g. a 1280x720 scene is followed by an 800x600 one).
+		m_backBuffer->clear(GLES3ClearTarget::All);
 		
 		const auto& windowState = SIV3D_ENGINE(Window)->getState();
 
